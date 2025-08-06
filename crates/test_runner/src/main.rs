@@ -10,9 +10,9 @@ fn main()
         Err(e) => return println!("Errors:\n{}\n", e.iter().join("\n"))
     };
 
-    if let Some(Module::Dictionary(dict)) = package.modules.get(0)
+    if let Some(Module::Dictionary(dict)) = package.modules.iter().find(|m| m.is_dict())
     {
-        let name = "zUzims'";
+        let name = "Zuzims'";
         if let Some(entry) = dict.find(name)
         {
             println!("{}: {}", entry.term, entry.definitions.iter().join(", "))

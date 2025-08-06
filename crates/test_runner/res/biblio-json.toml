@@ -1,0 +1,7 @@
+name = "This is a test package"
+authors = [ "Nate Craver" ]
+license = "We dont need no stinking license"
+
+[module_paths]
+# bibles = "/bibles/*"
+dictionaries = "/dictionaries/*"

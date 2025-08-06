@@ -191,6 +191,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "test_runner"
+version = "0.1.0"
+dependencies = [
+ "biblio_json",
+ "itertools",
+]
+
+[[package]]
 name = "toml"
 version = "0.9.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
