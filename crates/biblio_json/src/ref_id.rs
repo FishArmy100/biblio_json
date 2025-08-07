@@ -50,6 +50,50 @@ pub enum Atom
     Word { book: String, chapter: NonZeroU32, verse: NonZeroU32, word: NonZeroU32 },
 }
 
+impl Atom
+{
+    pub fn book(&self) -> &str 
+    {
+        match self 
+        {
+            Atom::Book { book } => &book,
+            Atom::Chapter { book, chapter: _ } => &book,
+            Atom::Verse { book, chapter: _, verse: _ } => &book,
+            Atom::Word { book, chapter: _, verse: _, word: _ } => &book,
+        }
+    }
+
+    pub fn chapter(&self) -> Option<NonZeroU32>
+    {
+        match self 
+        {
+            Atom::Chapter { book: _, chapter } => Some(*chapter),
+            Atom::Verse { book: _, chapter, verse: _ } => Some(*chapter),
+            Atom::Word { book: _, chapter, verse: _, word: _ } => Some(*chapter),
+            _ => None
+        }
+    }
+
+    pub fn verse(&self) -> Option<NonZeroU32>
+    {
+        match self 
+        {
+            Atom::Verse { book: _, chapter: _, verse } => Some(*verse),
+            Atom::Word { book: _, chapter: _, verse, word: _ } => Some(*verse),
+            _ => None,
+        }
+    }
+
+    pub fn word(&self) -> Option<NonZeroU32>
+    {
+        match self 
+        {
+            Atom::Word { book: _, chapter: _, verse: _, word } => Some(*word),
+            _ => None,
+        }
+    }
+}
+
 impl fmt::Display for Atom 
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result 

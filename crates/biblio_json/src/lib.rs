@@ -5,7 +5,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::modules::{bible::BibleModule, dict::DictModule, Module};
+use crate::modules::{bible::BibleModule, dict::DictModule, xrefs::XRefModule, Module};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -25,6 +25,7 @@ pub struct ModulePaths
 {
     pub bibles: Option<String>,
     pub dictionaries: Option<String>,
+    pub xrefs: Option<String>,
 }
 
 #[derive(Debug)]
@@ -74,18 +75,42 @@ impl Package
         
         if let Some(bibles_path) = &paths.bibles
         {
-            match Self::load_bibles(root, &bibles_path)
+            let result = Self::load_module(root, &bibles_path, |dir, name| 
             {
-                Ok(ok) => modules.extend(ok.into_iter().map(|b| Module::Bible(b))),
+                Ok(Module::Bible(BibleModule::load(dir, name)?))
+            });
+
+            match result
+            {
+                Ok(ok) => modules.extend(ok),
                 Err(e) => errors.push(e),
             }
         }
 
         if let Some(dictionary_paths) = &paths.dictionaries
         {
-            match Self::load_dictionaries(root, &dictionary_paths)
+            let result =  Self::load_module(root, &dictionary_paths, |dir, name| 
             {
-                Ok(ok) => modules.extend(ok.into_iter().map(|d| Module::Dictionary(d))),
+                Ok(Module::Dictionary(DictModule::load(dir, name)?))
+            });
+
+            match result
+            {
+                Ok(ok) => modules.extend(ok),
+                Err(e) => errors.push(e),
+            }
+        }
+
+        if let Some(xref_paths) = &paths.xrefs
+        {
+            let result =  Self::load_module(root, &xref_paths, |dir, name| 
+            {
+                Ok(Module::XRef(XRefModule::load(dir, name)?))
+            });
+
+            match result
+            {
+                Ok(ok) => modules.extend(ok),
                 Err(e) => errors.push(e),
             }
         }
@@ -100,11 +125,11 @@ impl Package
         }
     }
 
-    fn load_bibles(base_dir: &str, pattern: &str) -> Result<Vec<BibleModule>, String>
+    fn load_module(base_dir: &str, pattern: &str, f: impl Fn(&str, &str) -> Result<Module, String>) -> Result<Vec<Module>, String>
     {
         let full_path = format!("{}/{}", base_dir, pattern);
 
-        glob::glob(&full_path).map_err(|e| e.to_string())?.filter_map(|entry| -> Option<Result<BibleModule, String>> {
+        glob::glob(&full_path).map_err(|e| e.to_string())?.filter_map(|entry| -> Option<Result<Module, String>> {
             let entry = match entry {
                 Ok(ok) => ok,
                 Err(e) => return Some(Err(e.to_string())),
@@ -128,39 +153,7 @@ impl Package
                 None => return Some(Err(format!("Expected path {} to have a stem", path.display())))
             }.to_str().unwrap();
 
-            Some(BibleModule::load(dir, name))
-        }).collect()
-    }
-    
-    fn load_dictionaries(base_dir: &str, pattern: &str) -> Result<Vec<DictModule>, String> 
-    {
-        let full_path = format!("{}/{}", base_dir, pattern);
-
-        glob::glob(&full_path).map_err(|e| e.to_string())?.filter_map(|entry| -> Option<Result<DictModule, String>> {
-            let entry = match entry {
-                Ok(ok) => ok,
-                Err(e) => return Some(Err(e.to_string())),
-            };
-
-            let path = Path::new(&entry);
-
-            let ext = path.extension().map(|s| s.to_str()).flatten();
-            if ext != Some("toml")
-            {
-                return None;
-            }
-            
-            let dir = match path.parent() {
-                Some(s) => s,
-                None => return Some(Err(format!("Expected path {} to have a parent", path.display())))
-            }.to_str().unwrap();
-
-            let name = match path.file_stem() {
-                Some(s) => s,
-                None => return Some(Err(format!("Expected path {} to have a stem", path.display())))
-            }.to_str().unwrap();
-
-            Some(DictModule::load(dir, name))
+            Some(f(dir, name))
         }).collect()
     }
 }

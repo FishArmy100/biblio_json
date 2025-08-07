@@ -52,8 +52,18 @@ impl XRef
 
         Ok(ret)
     }
+
+    pub fn has_source(&self, id: &RefId) -> bool
+    {
+        match self 
+        {
+            Self::Directed { source, source_text: _, targets: _, note: _ } => source == id,
+            Self::Mutual { refs, note: _ } => refs.iter().find(|r| r.id == *id).is_some()
+        }
+    }
 }
 
+#[derive(Debug)]
 pub struct XRefModule
 {
     pub name: String,

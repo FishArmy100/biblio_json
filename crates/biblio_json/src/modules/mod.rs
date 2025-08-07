@@ -4,7 +4,7 @@ pub mod xrefs;
 
 use bible::BibleModule;
 
-use crate::modules::dict::DictModule;
+use crate::modules::{dict::DictModule, xrefs::XRefModule};
 
 
 
@@ -12,7 +12,8 @@ use crate::modules::dict::DictModule;
 pub enum Module
 {
     Bible(BibleModule),
-    Dictionary(DictModule)
+    Dictionary(DictModule),
+    XRef(XRefModule),
 }
 
 impl Module
@@ -31,6 +32,15 @@ impl Module
         match self 
         {
             Self::Dictionary(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_xrefs(&self) -> bool
+    {
+        match self 
+        {
+            Self::XRef(_) => true,
             _ => false,
         }
     }

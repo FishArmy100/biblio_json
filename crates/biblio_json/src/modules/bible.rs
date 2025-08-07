@@ -1,8 +1,8 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, num::NonZeroU32};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ref_id::RefId, utils};
+use crate::{ref_id::{Atom, RefId}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -140,6 +140,37 @@ impl BibleSource
             book_infos,
             verses,
         })
+    }
+
+    pub fn id_exists(&self, id: &RefId) -> bool
+    {
+        match id 
+        {
+            RefId::Single(atom) => self.id_atom_exists(atom),
+            RefId::Range { from, to } => self.id_atom_exists(from) && self.id_atom_exists(to),
+        }
+    }
+
+    pub fn id_atom_exists(&self, atom: &Atom) -> bool
+    {
+        let book = atom.book();
+        let chapter = atom.chapter().unwrap_or(NonZeroU32::new(1).unwrap());
+        let verse = atom.verse().unwrap_or(NonZeroU32::new(1).unwrap());
+
+        let complete_verse = RefId::Single(Atom::Verse { book: book.into(), chapter, verse });
+
+        let word = atom.word();
+
+        let Some(verse_data) = self.verses.get(&complete_verse) else {
+            return false;
+        };
+
+        if let Some(word) = word.map(|w| w.get())
+        {
+            return word as usize <= verse_data.words.len();
+        }
+
+        true
     }
 }
 
