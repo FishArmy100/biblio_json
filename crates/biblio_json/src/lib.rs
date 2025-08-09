@@ -1,11 +1,12 @@
 pub(crate) mod utils;
 pub mod modules;
 pub mod ref_id;
-use std::path::Path;
+use std::{fmt::Display, path::Path};
 
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::modules::{bible::BibleModule, dict::DictModule, xrefs::XRefModule, Module};
+use crate::{modules::{bible::BibleModule, dict::DictModule, xrefs::{XRef, XRefModule}, Module}, ref_id::RefId};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -26,6 +27,30 @@ pub struct ModulePaths
     pub bibles: Option<String>,
     pub dictionaries: Option<String>,
     pub xrefs: Option<String>,
+}
+
+pub enum PackageValidationError
+{
+    InvalidRefId
+    {
+        id: RefId,
+        bible_name: String,
+        xref_name: String,
+        line: usize,
+    }
+}
+
+impl Display for PackageValidationError
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
+    {
+        match self 
+        {
+            Self::InvalidRefId { id, bible_name, xref_name, line } => {
+                write!(f, "RefId {} in xref module {} on line {} does not exist in Bible {}", id, xref_name, line, bible_name)
+            }
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -122,6 +147,60 @@ impl Package
         else 
         {
             Ok(modules)    
+        }
+    }
+
+    pub fn validate(&self) -> Result<(), Vec<PackageValidationError>>
+    {
+        let mut errors = vec![];
+
+        let bibles = self.modules.iter().filter_map(|m| match m {
+            Module::Bible(b) => Some(b),
+            _ => None,
+        }).collect_vec();
+
+        let xrefs = self.modules.iter().filter_map(|m| match m {
+            Module::XRef(b) => Some(b),
+            _ => None,
+        }).collect_vec();
+
+        for bible in bibles
+        {
+            let bible_name = &bible.name;
+            for xref in &xrefs
+            {
+                let xref_name = &xref.name;
+
+                xref.refs.iter().enumerate().map(|(i, r)| match r {
+                    XRef::Directed { source, source_text: _, targets, note: _ } => {
+                        let mut ids = targets.iter().map(|t| (i, t.clone())).collect_vec();
+                        ids.push((i, source.clone()));
+                        ids
+                    },
+                    XRef::Mutual { refs, note: _ } => refs.iter().map(|r| (i, r.id.clone())).collect_vec(),
+                })
+                .flatten()
+                .for_each(|(i, id)| {
+                    if !bible.source.id_exists(&id)
+                    {
+                        errors.push(PackageValidationError::InvalidRefId { 
+                            id: id.clone(), 
+                            bible_name: bible_name.clone(), 
+                            xref_name: xref_name.clone(),
+                            line: i + 1,
+                        });
+                    }
+                });
+            }
+        }
+
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(())    
         }
     }
 
