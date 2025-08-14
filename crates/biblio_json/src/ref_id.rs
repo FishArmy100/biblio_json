@@ -28,6 +28,51 @@ impl RefId
         }
     }
 
+    pub fn is_range(&self) -> bool 
+    {
+        match self 
+        {
+            Self::Range { from: _, to: _ } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_book(&self) -> bool 
+    {  
+        match self 
+        {
+            RefId::Single(atom) => atom.is_book(),
+            RefId::Range { from, to } => from.is_book() && to.is_book(),
+        }
+    }
+
+    pub fn is_chapter(&self) -> bool 
+    {
+        match self 
+        {
+            RefId::Single(atom) => atom.is_chapter(),
+            RefId::Range { from, to } => from.is_chapter() && to.is_chapter(),
+        }
+    }
+
+    pub fn is_verse(&self) -> bool 
+    {
+        match self 
+        {
+            RefId::Single(atom) => atom.is_verse(),
+            RefId::Range { from, to } => from.is_verse() && to.is_verse(),
+        }
+    }
+
+    pub fn is_word(&self) -> bool 
+    {
+        match self 
+        {
+            RefId::Single(atom) => atom.is_word(),
+            RefId::Range { from, to } => from.is_word() && to.is_word(),
+        }
+    }
+
     pub fn get_verse_components(&self) -> Option<(&str, u32, u32)>
     {
         if let Self::Single(Atom::Verse { book, chapter, verse }) = self 
@@ -52,6 +97,42 @@ pub enum Atom
 
 impl Atom
 {
+    pub fn is_book(&self) -> bool
+    {
+        match self 
+        {
+            Self::Book { book: _ } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_chapter(&self) -> bool 
+    {
+        match self 
+        {
+            Self::Chapter { book: _, chapter: _ } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_verse(&self) -> bool 
+    {
+        match self 
+        {
+            Self::Verse { book: _, chapter: _, verse: _ } => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_word(&self) -> bool
+    {
+        match self 
+        {
+            Self::Word { book: _, chapter: _, verse: _, word: _ } => true,
+            _ => false,
+        }
+    }
+
     pub fn book(&self) -> &str 
     {
         match self 

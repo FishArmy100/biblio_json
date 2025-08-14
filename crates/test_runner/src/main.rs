@@ -1,6 +1,6 @@
-use std::{fs, path::Path, str::FromStr, time::SystemTime};
+use std::str::FromStr;
 
-use biblio_json::{modules::{xrefs::XRef, Module}, ref_id::RefId, Package, PackageValidationError};
+use biblio_json::{ref_id::RefId, Package, PackageValidationError};
 use itertools::Itertools;
 
 fn main()
@@ -24,11 +24,15 @@ fn main()
         .map(|(i, (line, id))| format!(" {}. {} on {}", i + 1, id, line))
         .join("\n");
 
-        println!("Unknown errors:\n{}", msg)
+        println!("Validation errors:\n{}", msg)
     }
     else 
     {
         println!("Validation passed!");
     }
+
+    let fetch_ref = RefId::from_str("Gen.2.8").unwrap();
+    let stuff = package.fetch("kjv", &fetch_ref);
+    println!("{:#?}", stuff);
 }
 

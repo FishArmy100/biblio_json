@@ -16,7 +16,7 @@ pub struct DictConfig
     pub license: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DictEntry
 {
     pub term: String,

@@ -1,5 +1,7 @@
 
 [workspace]
+resolver = "1"
+
 members = [
     "./crates/test_runner",
     "./crates/biblio_json"

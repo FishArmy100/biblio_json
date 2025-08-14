@@ -15,7 +15,7 @@ pub struct XRefsConfig
     pub bible_dep: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
 pub struct MutualRef
 {
@@ -23,7 +23,7 @@ pub struct MutualRef
     pub text: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum XRef 
 {
