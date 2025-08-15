@@ -19,16 +19,13 @@ pub struct BibleConfig
 #[derive(Debug)]
 pub struct BibleModule
 {
-    pub name: String,
-    pub description: String,
-    pub language: String,
-    pub pub_year: Option<u32>,
+    pub config: BibleConfig,
     pub source: BibleSource, 
 }
 
 impl BibleModule
 {
-    pub fn load(dir_path: &str, name: &str) -> Result<BibleModule, String>
+    pub fn load(dir_path: &str, name: &str) -> Result<Self, String>
     {
         let config_path = format!("{}/{}.toml", dir_path, name);
         let config: BibleConfig = utils::load_toml(config_path)?;
@@ -37,10 +34,7 @@ impl BibleModule
         let source = BibleSource::from_file(&bible_path, &config.books)?;
 
         Ok(Self { 
-            name: config.name, 
-            description: config.description,
-            language: config.language,
-            pub_year: config.pub_year,
+            config,
             source,
         })
     }

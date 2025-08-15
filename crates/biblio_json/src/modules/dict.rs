@@ -40,12 +40,7 @@ impl DictEntry
 #[derive(Debug)]
 pub struct DictModule
 {
-    pub name: String,
-    pub authors: Vec<String>,
-    pub language: String,
-    pub description: Option<String>,
-    pub pub_year: Option<u32>,
-    pub license: Option<String>,
+    pub config: DictConfig,
     pub entries: Vec<DictEntry>,
 }
 
@@ -60,12 +55,7 @@ impl DictModule
         let entries = DictEntry::from_file(&dictionary_path)?;
 
         Ok(Self { 
-            name: config.name, 
-            authors: config.authors,
-            description: config.description,
-            language: config.language,
-            pub_year: config.pub_year,
-            license: config.license,
+            config,
             entries,
         })
     }

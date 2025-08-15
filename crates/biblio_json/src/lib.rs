@@ -6,7 +6,7 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{modules::{bible::{BibleModule, BibleSource, Verse}, dict::{DictEntry, DictModule}, link::{LinkerModule, WordRange}, xrefs::{XRef, XRefModule}, Module}, ref_id::{Atom, RefId}};
+use crate::{modules::{bible::{BibleModule, Verse}, dict::{DictEntry, DictModule}, link::{LinkerModule, WordRange}, strongs::StrongsDefsModule, xrefs::{XRef, XRefModule}, Module}, ref_id::{Atom, RefId}};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -28,6 +28,7 @@ pub struct ModulePaths
     pub dictionaries: Option<String>,
     pub xrefs: Option<String>,
     pub linkers: Option<String>,
+    pub strongs_defs: Option<String>,
 }
 
 pub enum PackageValidationError
@@ -129,11 +130,11 @@ impl Package
             return Err(format!("Verse {} does not exist in bible {}", ref_id, bible_name));
         };
 
-        let Some(linker) = self.modules.values().find_map(|m| m.as_linker().filter(|linker| linker.bible == bible_name)) else {
+        let Some(linker) = self.modules.values().find_map(|m| m.as_linker().filter(|linker| linker.config.bible == bible_name)) else {
             return Err(format!("Bible {} does not have a linker in this package", bible_name));
         };
 
-        let referenced_modules = linker.ref_works.iter().map(|(name, id)| {
+        let referenced_modules = linker.config.ref_works.iter().map(|(name, id)| {
             let Some(module) = self.get_mod(name) else {
                 return Err(format!("Module {} does not exist in package {}", name, self.name));
             };
@@ -165,27 +166,27 @@ impl Package
                     {
                         Module::Dictionary(dict_module) => {
                             let Some(entry) = dict_module.entries.get(link_ref.work_index as usize) else {
-                                return Err(format!("work_index `{}` is out of range for module `{}` in package `{}`", link_ref.work_index, dict_module.name, self.name));
+                                return Err(format!("work_index `{}` is out of range for module `{}` in package `{}`", link_ref.work_index, dict_module.config.name, self.name));
                             };
 
                             defs.push(FetchEntry { 
                                 loc: loc.clone(), 
-                                module_name: dict_module.name.clone(), 
+                                module_name: dict_module.config.name.clone(), 
                                 entry: entry.clone() 
                             });
                         },
                         Module::XRef(xref_module) => {
                             let Some(xref) = xref_module.refs.get(link_ref.work_index as usize) else {
-                                return Err(format!("work_index {} is out of range for module {} in package {}", link_ref.work_index, xref_module.name, self.name));
+                                return Err(format!("work_index {} is out of range for module {} in package {}", link_ref.work_index, xref_module.config.name, self.name));
                             };
 
                             xrefs.push(FetchEntry { 
                                 loc: loc.clone(), 
-                                module_name: xref_module.name.clone(), 
+                                module_name: xref_module.config.name.clone(), 
                                 entry: xref.clone() 
                             });
                         },
-                        Module::Bible(_) | Module::Linker(_) => panic!("This should not be reachable"),
+                        Module::Bible(_) | Module::Linker(_) | Module::Strongs(_) => panic!("This should not be reachable"),
                     }
                 }
             }
@@ -259,6 +260,19 @@ impl Package
             }
         }
 
+        if let Some(strongs_defs) = &paths.linkers
+        {
+            let result = Self::load_module(root, strongs_defs, |dir, name| {
+                Ok(Module::Strongs(StrongsDefsModule::load(dir, name)?))
+            });
+
+            match result 
+            {
+                Ok(ok) => modules.extend(ok),
+                Err(e) => errors.push(e),
+            }
+        }
+
         if errors.len() > 0
         {
             Err(errors)
@@ -285,10 +299,10 @@ impl Package
 
         for bible in bibles
         {
-            let bible_name = &bible.name;
+            let bible_name = &bible.config.name;
             for xref in &xrefs
             {
-                let xref_name = &xref.name;
+                let xref_name = &xref.config.name;
 
                 xref.refs.iter().enumerate().map(|(i, r)| match r {
                     XRef::Directed { source, source_text: _, targets, note: _ } => {

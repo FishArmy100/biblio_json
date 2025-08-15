@@ -2,10 +2,11 @@ pub mod bible;
 pub mod dict;
 pub mod xrefs;
 pub mod link;
+pub mod strongs;
 
 use bible::BibleModule;
 
-use crate::modules::{dict::DictModule, link::LinkerModule, xrefs::XRefModule};
+use crate::modules::{dict::DictModule, link::LinkerModule, strongs::StrongsDefsModule, xrefs::XRefModule};
 
 
 
@@ -15,7 +16,8 @@ pub enum Module
     Bible(BibleModule),
     Dictionary(DictModule),
     XRef(XRefModule),
-    Linker(LinkerModule)
+    Linker(LinkerModule),
+    Strongs(StrongsDefsModule),
 }
 
 impl Module
@@ -92,14 +94,33 @@ impl Module
         }
     }
 
+    pub fn is_strongs(&self) -> bool
+    {
+        match self 
+        {
+            Self::Strongs(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn as_strongs(&self) -> Option<&StrongsDefsModule>
+    {
+        match self 
+        {
+            Self::Strongs(s) => Some(s),
+            _ => None,
+        }
+    }
+
     pub fn get_name(&self) -> &str 
     {
         match self 
         {
-            Module::Bible(bible_module) => &bible_module.name,
-            Module::Dictionary(dict_module) => &dict_module.name,
-            Module::XRef(xref_module) => &xref_module.name,
-            Module::Linker(linker_module) => &linker_module.name,
+            Module::Bible(bible_module) => &bible_module.config.name,
+            Module::Dictionary(dict_module) => &dict_module.config.name,
+            Module::XRef(xref_module) => &xref_module.config.name,
+            Module::Linker(linker_module) => &linker_module.config.name,
+            Module::Strongs(strongs) => &strongs.config.name,
         }
     }
 }

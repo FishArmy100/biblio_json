@@ -24,9 +24,7 @@ pub struct LinkerConfig
 #[derive(Debug)]
 pub struct LinkerModule
 {
-    pub name: String,
-    pub bible: String,
-    pub ref_works: BiMap<String, u32>,
+    pub config: LinkerConfig,
     pub links: HashMap<RefId, VerseLink>
 }
 
@@ -41,9 +39,7 @@ impl LinkerModule
         let links = VerseLink::from_file(&bible_path)?;
 
         Ok(Self {
-            name: config.name,
-            bible: config.bible,
-            ref_works: config.ref_works,
+            config,
             links,
         })
     }

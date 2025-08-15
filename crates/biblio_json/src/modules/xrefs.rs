@@ -66,14 +66,8 @@ impl XRef
 #[derive(Debug)]
 pub struct XRefModule
 {
-    pub name: String,
-    pub description: Option<String>,
-    pub data_source: Option<String>,
-    pub pub_year: Option<u32>,
-    pub language: Option<String>,
-    pub license: Option<String>,
+    pub config: XRefsConfig,
     pub refs: Vec<XRef>,
-    pub bible_dep: Option<String>,
 }
 
 impl XRefModule
@@ -87,13 +81,7 @@ impl XRefModule
         let refs = XRef::from_file(&dictionary_path)?;
 
         Ok(Self { 
-            name: config.name,
-            description: config.description,
-            language: config.language,
-            pub_year: config.pub_year,
-            license: config.license,
-            data_source: config.data_source,
-            bible_dep: config.bible_dep,
+            config,
             refs,
         })
     }
