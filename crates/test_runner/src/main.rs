@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-use biblio_json::{ref_id::RefId, Package, PackageValidationError};
+use biblio_json::{modules::strongs::StrongsNumber, ref_id::RefId, Package, PackageValidationError};
 use itertools::Itertools;
 
 fn main()
@@ -31,8 +31,14 @@ fn main()
         println!("Validation passed!");
     }
 
-    let fetch_ref = RefId::from_str("Gen.2.8").unwrap();
-    let stuff = package.fetch("kjv", &fetch_ref);
-    println!("{:#?}", stuff);
+    // let fetch_ref = RefId::from_str("Gen.2.8").unwrap();
+    // let stuff = package.fetch("kjv", &fetch_ref);
+    // println!("{:#?}", stuff);
+
+    if let Some(strongs) = package.get_mod("Standard Strongs Definitions").map(|m| m.as_strongs()).flatten()
+    {
+        let number = StrongsNumber::from_str("H1").unwrap();
+        println!("{:#?}", strongs.get_def(&number));
+    }
 }
 

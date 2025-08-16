@@ -260,7 +260,7 @@ impl Package
             }
         }
 
-        if let Some(strongs_defs) = &paths.linkers
+        if let Some(strongs_defs) = &paths.strongs_defs
         {
             let result = Self::load_module(root, strongs_defs, |dir, name| {
                 Ok(Module::Strongs(StrongsDefsModule::load(dir, name)?))

@@ -53,7 +53,7 @@ impl FromStr for StrongsNumber
                     _ => return Err(format!("String {} is not a valid strongs number", s))
                 };
 
-                let number = captures.name("end").unwrap().as_str();
+                let number = captures.name("number").unwrap().as_str();
                 let number = match u32::from_str(number) {
                     Ok(ok) => ok,
                     Err(e) => return Err(e.to_string()),
