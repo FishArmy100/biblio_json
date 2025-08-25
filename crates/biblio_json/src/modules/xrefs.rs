@@ -1,9 +1,10 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{ref_id::RefId, utils};
+use crate::{core::RefId, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct XRefsConfig
 {
     pub name: String,

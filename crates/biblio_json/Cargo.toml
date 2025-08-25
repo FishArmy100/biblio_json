@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 bimap = { version = "0.6.3", features = ["serde"] }
 glob = "0.3.2"
+isolang = { version = "2.4.0", features = ["local_names", "lowercase_names", "serde"] }
 itertools = "0.14.0"
 lazy_static = "1.5.0"
 rayon = "1.10.0"

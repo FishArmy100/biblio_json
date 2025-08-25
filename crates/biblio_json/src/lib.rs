@@ -1,12 +1,13 @@
 pub(crate) mod utils;
 pub mod modules;
-pub mod ref_id;
+pub mod core;
+pub mod html_text;
 use std::{collections::HashMap, fmt::Display, path::Path};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{modules::{bible::{BibleModule, Verse}, dict::{DictEntry, DictModule}, link::{LinkerModule, WordRange}, strongs::StrongsDefsModule, xrefs::{XRef, XRefModule}, Module}, ref_id::{Atom, RefId}};
+use crate::{modules::{bible::{BibleModule, Verse}, dict::{DictEntry, DictModule}, strongs::StrongsDefsModule, xrefs::{XRef, XRefModule}, Module}, core::{Atom, RefId}};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -27,7 +28,6 @@ pub struct ModulePaths
     pub bibles: Option<String>,
     pub dictionaries: Option<String>,
     pub xrefs: Option<String>,
-    pub linkers: Option<String>,
     pub strongs_defs: Option<String>,
 }
 
@@ -116,90 +116,6 @@ impl Package
         self.modules.get(name)
     }
 
-    pub fn fetch(&self, bible_name: &str, ref_id: &RefId) -> Result<FetchData, String>
-    {
-        if !ref_id.is_verse() || ref_id.is_range() {
-            return Err(format!("RefId {} is not in the format Gen.1.1", ref_id))
-        }
-
-        let Some(bible) = self.get_mod(bible_name).map(|b| b.as_bible()).flatten() else {
-            return Err(format!("Bible {} does not exist in this package", bible_name));
-        };
-
-        let Some(verse) = bible.source.verses.get(ref_id).cloned() else {
-            return Err(format!("Verse {} does not exist in bible {}", ref_id, bible_name));
-        };
-
-        let Some(linker) = self.modules.values().find_map(|m| m.as_linker().filter(|linker| linker.config.bible == bible_name)) else {
-            return Err(format!("Bible {} does not have a linker in this package", bible_name));
-        };
-
-        let referenced_modules = linker.config.ref_works.iter().map(|(name, id)| {
-            let Some(module) = self.get_mod(name) else {
-                return Err(format!("Module {} does not exist in package {}", name, self.name));
-            };
-
-            if !module.is_dict() && !module.is_xrefs()
-            {
-                return Err(format!("Module `{}` in package `{}` is not a Dictionary or XRef module", module.get_name(), self.name))
-            }
-
-            Ok((*id, module))
-        }).collect::<Result<HashMap<_, _>, _>>()?;
-
-        let mut xrefs = vec![];
-        let mut defs = vec![];
-
-        if let Some(verse_link) = linker.links.get(ref_id)
-        {
-            for (r, link) in &verse_link.links
-            {
-                let loc = extract_ref_loc(ref_id, &verse, r);
-
-                for link_ref in link
-                {
-                    let Some(module) = referenced_modules.get(&link_ref.ref_work_id) else {
-                        return Err(format!("ref_work_id `{}` does not exist in package `{}`", link_ref.ref_work_id, self.name))
-                    };
-
-                    match module
-                    {
-                        Module::Dictionary(dict_module) => {
-                            let Some(entry) = dict_module.entries.get(link_ref.work_index as usize) else {
-                                return Err(format!("work_index `{}` is out of range for module `{}` in package `{}`", link_ref.work_index, dict_module.config.name, self.name));
-                            };
-
-                            defs.push(FetchEntry { 
-                                loc: loc.clone(), 
-                                module_name: dict_module.config.name.clone(), 
-                                entry: entry.clone() 
-                            });
-                        },
-                        Module::XRef(xref_module) => {
-                            let Some(xref) = xref_module.refs.get(link_ref.work_index as usize) else {
-                                return Err(format!("work_index {} is out of range for module {} in package {}", link_ref.work_index, xref_module.config.name, self.name));
-                            };
-
-                            xrefs.push(FetchEntry { 
-                                loc: loc.clone(), 
-                                module_name: xref_module.config.name.clone(), 
-                                entry: xref.clone() 
-                            });
-                        },
-                        Module::Bible(_) | Module::Linker(_) | Module::Strongs(_) => panic!("This should not be reachable"),
-                    }
-                }
-            }
-        }
-
-        
-        Ok(FetchData { 
-            verse,
-            xrefs,
-            defs
-        })
-    }
-
     fn load_modules(root: &str, paths: &ModulePaths) -> Result<Vec<Module>, Vec<String>>
     {
         let mut modules = vec![];
@@ -241,19 +157,6 @@ impl Package
             });
 
             match result
-            {
-                Ok(ok) => modules.extend(ok),
-                Err(e) => errors.push(e),
-            }
-        }
-
-        if let Some(linker_paths) = &paths.linkers
-        {
-            let result = Self::load_module(root, &linker_paths, |dir, name| {
-                Ok(Module::Linker(LinkerModule::load(dir, name)?))
-            });
-
-            match result 
             {
                 Ok(ok) => modules.extend(ok),
                 Err(e) => errors.push(e),
@@ -367,45 +270,5 @@ impl Package
 
             Some(f(dir, name))
         }).collect()
-    }
-}
-
-fn extract_ref_loc(ref_id: &RefId, verse: &Verse, r: &WordRange) -> RefId
-{
-    if r.start == 1 && r.end == verse.words.len() as u32 
-    {
-        ref_id.clone()
-    } 
-    else 
-    {
-        let (book, chapter, verse) = ref_id.get_verse_components().unwrap();
-
-        if r.start == r.end
-        {
-            RefId::Single(Atom::Word { 
-                book: book.into(), 
-                chapter: chapter.try_into().unwrap(), 
-                verse: verse.try_into().unwrap(), 
-                word: r.start.try_into().unwrap() 
-            })
-        }
-        else 
-        {
-            let start = Atom::Word { 
-                book: book.into(), 
-                chapter: chapter.try_into().unwrap(), 
-                verse: verse.try_into().unwrap(), 
-                word: r.start.try_into().unwrap() 
-            };
-
-            let end = Atom::Word { 
-                book: book.into(), 
-                chapter: chapter.try_into().unwrap(), 
-                verse: verse.try_into().unwrap(), 
-                word: r.end.try_into().unwrap() 
-            };
-
-            RefId::Range { from: start, to: end }
-        }
     }
 }

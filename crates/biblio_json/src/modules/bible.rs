@@ -2,16 +2,17 @@ use std::{collections::{HashMap, HashSet}, num::NonZeroU32};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ref_id::{Atom, RefId}, utils};
+use crate::{core::{lang::Language, Atom, RefId}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct BibleConfig
 {
     pub name: String,
     pub description: String,
-    pub language: String,
-    pub pub_year: Option<u32>,
+    pub language: Language,
+    pub publication_year: Option<u32>,
     pub data_source: Option<String>,
     pub books: HashMap<String, String>,
 }

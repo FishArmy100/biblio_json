@@ -1,6 +1,0 @@
-name = "KJV Linker"
-bible = "kjv"
-
-[ref_works]
-"Scroll Mapper Cross References" = 0
-"Hitchcock's Bible Names Dictionary" = 1
