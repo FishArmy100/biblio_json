@@ -9,7 +9,7 @@ pub struct StrongsDefEntry
 {
     pub strongs_ref: StrongsNumber,
     pub word: String,
-    pub definition: HtmlText,
+    pub definitions: Vec<HtmlText>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{core::lang::Language, html_text::HtmlText, utils};
 
-
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DictConfig
@@ -22,7 +21,7 @@ pub struct DictEntry
 {
     pub term: String,
     pub aliases: Option<Vec<String>>,
-    pub definition: HtmlText,
+    pub definitions: Vec<HtmlText>,
 }
 
 impl DictEntry

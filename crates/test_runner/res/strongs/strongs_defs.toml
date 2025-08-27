@@ -1,4 +1,4 @@
 name = "Standard Strongs Definitions"
 license = "Public Domain"
-source = "Extracted from the SWORD project's StrongsGreek and StrongsHebrew concordances"
+data_source = "Extracted from the SWORD project's StrongsGreek and StrongsHebrew concordances"
 language = "en"

@@ -4,6 +4,6 @@ license = "We dont need no stinking license"
 
 [module_paths]
 bibles = "/bibles/*"
-# dictionaries = "/dictionaries/*"
-# xrefs = "/cross_references/*"
-# strongs_defs = "/strongs/*"
+dictionaries = "/dictionaries/*"
+xrefs = "/cross_references/*"
+strongs_defs = "/strongs/*"

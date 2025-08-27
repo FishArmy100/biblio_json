@@ -2,12 +2,12 @@ pub(crate) mod utils;
 pub mod modules;
 pub mod core;
 pub mod html_text;
-use std::{collections::HashMap, fmt::Display, path::Path};
+use std::{collections::HashMap, fmt::Display, path::Path, sync::Arc};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{modules::{bible::{BibleModule, Verse}, dict::{DictEntry, DictModule}, strongs::StrongsDefsModule, xrefs::{XRef, XRefModule}, Module}, core::RefId};
+use crate::{core::RefId, modules::{Module, bible::BibleModule, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::{XRef, XRefModule}}};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -29,6 +29,8 @@ pub struct ModulePaths
     pub dictionaries: Option<String>,
     pub xrefs: Option<String>,
     pub strongs_defs: Option<String>,
+    pub strongs_links: Option<String>,
+    pub commentaries: Option<String>,
 }
 
 pub enum PackageValidationError
@@ -55,20 +57,34 @@ impl Display for PackageValidationError
     }
 }
 
-#[derive(Debug)]
-pub struct FetchEntry<T>
+#[derive(Debug, Clone)]
+pub struct LoadPackageError
 {
-    pub loc: RefId,
-    pub module_name: String,
-    pub entry: T,
+    pub file: Option<String>,
+    pub message: String,
 }
 
-#[derive(Debug)]
-pub struct FetchData 
+impl LoadPackageError
 {
-    pub verse: Verse,
-    pub xrefs: Vec<FetchEntry<XRef>>,
-    pub defs: Vec<FetchEntry<DictEntry>>,
+    pub fn new(message: String) -> Self 
+    {
+        Self {
+            file: None,
+            message,
+        }
+    }
+}
+
+impl Display for LoadPackageError
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
+    {
+        match &self.file
+        {
+            Some(file) => write!(f, "Error in file {}\n{}", file, self.message),
+            None => write!(f, "{}", self.message)
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -82,20 +98,24 @@ pub struct Package
 
 impl Package
 {
-    pub fn load(dir_path: &str) -> Result<Self, Vec<String>>
+    pub fn load(dir_path: &str) -> Result<Self, Vec<LoadPackageError>>
     {
         let path = Path::new(dir_path);
 
         if !path.is_dir()
         {
-            return Err(vec![format!("Provided path: {dir_path}, must be a directory")]);
+            return Err(vec![LoadPackageError::new(format!("Provided path: {dir_path}, must be a directory"))]);
         }
 
         let config_path = path.join(Path::new(PACKAGE_FILE_NAME));
-        let file = utils::load_file(config_path).map_err(|e| vec![e])?;
+        let file = utils::load_file(&config_path).map_err(|e| vec![LoadPackageError {
+            file: config_path.to_str().map(|s| s.to_owned()),
+            message: e.to_string(),
+        }])?;
+        
         let config = match toml::from_str::<PackageConfig>(&file) {
             Ok(ok) => ok,
-            Err(e) => return Err(vec![e.to_string()])
+            Err(e) => return Err(vec![LoadPackageError::new(e.to_string())])
         };
 
         let modules = match &config.module_paths {
@@ -116,7 +136,7 @@ impl Package
         self.modules.get(name)
     }
 
-    fn load_modules(root: &str, paths: &ModulePaths) -> Result<Vec<Module>, Vec<String>>
+    fn load_modules(root: &str, paths: &ModulePaths) -> Result<Vec<Module>, Vec<LoadPackageError>>
     {
         let mut modules = vec![];
         let mut errors = vec![];
@@ -125,7 +145,7 @@ impl Package
         {
             let result = Self::load_module(root, &bibles_path, |dir, name| 
             {
-                Ok(Module::Bible(BibleModule::load(dir, name)?))
+                Ok(Module::Bible(Arc::new(BibleModule::load(dir, name)?)))
             });
 
             match result
@@ -139,7 +159,7 @@ impl Package
         {
             let result =  Self::load_module(root, &dictionary_paths, |dir, name| 
             {
-                Ok(Module::Dictionary(DictModule::load(dir, name)?))
+                Ok(Module::Dictionary(Arc::new(DictModule::load(dir, name)?)))
             });
 
             match result
@@ -153,7 +173,7 @@ impl Package
         {
             let result =  Self::load_module(root, &xref_paths, |dir, name| 
             {
-                Ok(Module::XRef(XRefModule::load(dir, name)?))
+                Ok(Module::XRef(Arc::new(XRefModule::load(dir, name)?)))
             });
 
             match result
@@ -166,7 +186,33 @@ impl Package
         if let Some(strongs_defs) = &paths.strongs_defs
         {
             let result = Self::load_module(root, strongs_defs, |dir, name| {
-                Ok(Module::Strongs(StrongsDefsModule::load(dir, name)?))
+                Ok(Module::StrongsDefs(Arc::new(StrongsDefsModule::load(dir, name)?)))
+            });
+
+            match result 
+            {
+                Ok(ok) => modules.extend(ok),
+                Err(e) => errors.push(e),
+            }
+        }
+
+        if let Some(strongs_links) = &paths.strongs_links
+        {
+            let result = Self::load_module(root, strongs_links, |dir, name| {
+                Ok(Module::StrongsLinks(Arc::new(StrongsLinksModule::load(dir, name)?)))
+            });
+
+            match result 
+            {
+                Ok(ok) => modules.extend(ok),
+                Err(e) => errors.push(e),
+            }
+        }
+
+        if let Some(commentaries) = &paths.commentaries
+        {
+            let result = Self::load_module(root, commentaries, |dir, name| {
+                Ok(Module::Commentary(Arc::new(CommentaryModule::load(dir, name)?)))
             });
 
             match result 
@@ -240,14 +286,14 @@ impl Package
         }
     }
 
-    fn load_module(base_dir: &str, pattern: &str, f: impl Fn(&str, &str) -> Result<Module, String>) -> Result<Vec<Module>, String>
+    fn load_module(base_dir: &str, pattern: &str, f: impl Fn(&str, &str) -> Result<Module, String>) -> Result<Vec<Module>, LoadPackageError>
     {
         let full_path = format!("{}/{}", base_dir, pattern);
 
-        glob::glob(&full_path).map_err(|e| e.to_string())?.filter_map(|entry| -> Option<Result<Module, String>> {
+        glob::glob(&full_path).map_err(|e| LoadPackageError::new(e.to_string()))?.filter_map(|entry| -> Option<Result<Module, LoadPackageError>> {
             let entry = match entry {
                 Ok(ok) => ok,
-                Err(e) => return Some(Err(e.to_string())),
+                Err(e) => return Some(Err(LoadPackageError::new(e.to_string()))),
             };
 
             let path = Path::new(&entry);
@@ -260,15 +306,18 @@ impl Package
             
             let dir = match path.parent() {
                 Some(s) => s,
-                None => return Some(Err(format!("Expected path {} to have a parent", path.display())))
+                None => return Some(Err(LoadPackageError::new(format!("Expected path {} to have a parent", path.display()))))
             }.to_str().unwrap();
 
             let name = match path.file_stem() {
                 Some(s) => s,
-                None => return Some(Err(format!("Expected path {} to have a stem", path.display())))
+                None => return Some(Err(LoadPackageError::new(format!("Expected path {} to have a stem", path.display()))))
             }.to_str().unwrap();
 
-            Some(f(dir, name))
+            Some(f(dir, name).map_err(|e| LoadPackageError { 
+                file: path.canonicalize().ok().map(|p| p.display().to_string()), 
+                message: e
+            }))
         }).collect()
     }
 }

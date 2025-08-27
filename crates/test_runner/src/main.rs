@@ -11,11 +11,5 @@ fn main()
         },
         Err(e) => return println!("Package loaded with errors:\n{}\n", e.iter().join("\n"))
     };
-    
-    if let Some(Module::Bible(bible)) = package.get_mod("KJV")
-    {
-        let desc = &bible.config.description;
-        println!("\n\n{}\n\n", desc.as_ref().unwrap().to_string())
-    }
 }
 
