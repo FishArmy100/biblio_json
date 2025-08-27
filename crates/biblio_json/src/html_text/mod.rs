@@ -21,9 +21,8 @@ pub mod lex;
 pub mod parse;
 pub mod ast;
 
-use std::{collections::HashMap, fmt, ops::Deref};
-
-use itertools::Itertools;
+use std::{fmt, ops::Deref, str::FromStr};
+use serde::{Deserialize, Serialize};
 
 use crate::html_text::{ast::Block, lex::Lexer, parse::{ParseError, Parser}};
 
@@ -56,6 +55,44 @@ impl HtmlText
         p.parse()
     }
 }
+
+impl std::fmt::Display for HtmlText
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result 
+    {
+        write!(f, "{}", self.to_html())
+    }
+}
+
+impl FromStr for HtmlText
+{
+    type Err = ParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> 
+    {
+        HtmlText::from_str(s)
+    }
+}
+
+impl Serialize for HtmlText
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: serde::Serializer 
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for HtmlText
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: serde::Deserializer<'de> 
+    {
+        let s = String::deserialize(deserializer)?;
+        Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::html_text::ast::Inline;

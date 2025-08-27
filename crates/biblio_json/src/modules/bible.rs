@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, num::NonZeroU32};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{lang::Language, Atom, RefId}, utils};
+use crate::{core::{lang::Language, Atom, OsisBook, RefId}, html_text::HtmlText, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -10,11 +10,13 @@ use crate::{core::{lang::Language, Atom, RefId}, utils};
 pub struct BibleConfig
 {
     pub name: String,
-    pub description: String,
-    pub language: Language,
-    pub publication_year: Option<u32>,
+    pub authors: Option<Vec<String>>,
+    pub language: Option<Language>,
+    pub description: Option<HtmlText>,
     pub data_source: Option<String>,
-    pub books: HashMap<String, String>,
+    pub pub_year: Option<u32>,
+    pub license: Option<String>,
+    pub books: HashMap<OsisBook, String>,
 }
 
 #[derive(Debug)]
@@ -50,12 +52,12 @@ pub struct BibleSource
 
 impl BibleSource
 {
-    pub fn from_file(path: &str, books: &HashMap<String, String>) -> Result<BibleSource, String>
+    pub fn from_file(path: &str, books: &HashMap<OsisBook, String>) -> Result<BibleSource, String>
     {
         let verses: Vec<(Verse, usize)> = utils::load_json_lines(path)?;
 
-        let mut visited_books = HashSet::<String>::new();
-        let mut current_book: Option<&str> = None;
+        let mut visited_books = HashSet::<OsisBook>::new();
+        let mut current_book: Option<&OsisBook> = None;
         let mut book_chapters: Vec<u32> = vec![];
 
         let mut book_infos = HashMap::new();
@@ -77,13 +79,13 @@ impl BibleSource
 
                     book_infos.insert(visited_books.len() as u32, BookInfo {
                         name: name.clone(),
-                        osis_id: old_book.to_owned(),
+                        osis_book: old_book.to_owned(),
                         index: visited_books.len() as u32,
                         chapters: book_chapters,
                     });
                 }
 
-                if !visited_books.insert(book.to_owned())
+                if !visited_books.insert(*book)
                 {
                     return Err(format!("Book {} in file {} on line {}, has already been defined and is out of order.", book, path, line + 1));
                 }
@@ -120,7 +122,7 @@ impl BibleSource
 
             book_infos.insert(visited_books.len() as u32, BookInfo {
                 name: name.clone(),
-                osis_id: old_book.to_owned(),
+                osis_book: old_book.to_owned(),
                 index: visited_books.len() as u32,
                 chapters: book_chapters,
             });
@@ -152,7 +154,7 @@ impl BibleSource
         let chapter = atom.chapter().unwrap_or(NonZeroU32::new(1).unwrap());
         let verse = atom.verse().unwrap_or(NonZeroU32::new(1).unwrap());
 
-        let complete_verse = RefId::Single(Atom::Verse { book: book.into(), chapter, verse });
+        let complete_verse = RefId::Single(Atom::Verse { book: *book, chapter, verse });
 
         let word = atom.word();
 
@@ -192,7 +194,7 @@ pub struct Word
 pub struct BookInfo
 {
     pub name: String,
-    pub osis_id: String,
+    pub osis_book: OsisBook,
     pub index: u32,
     pub chapters: Vec<u32>
 }

@@ -1,7 +1,7 @@
 use itertools::{EitherOrBoth, Itertools};
 use serde::{Deserialize, Serialize};
 
-use crate::utils;
+use crate::{core::lang::Language, html_text::HtmlText, utils};
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -9,9 +9,9 @@ use crate::utils;
 pub struct DictConfig
 {
     pub name: String,
-    pub authors: Vec<String>,
-    pub language: String,
-    pub description: Option<String>,
+    pub authors: Option<Vec<String>>,
+    pub language: Option<Language>,
+    pub description: Option<HtmlText>,
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
     pub license: Option<String>,
@@ -22,7 +22,7 @@ pub struct DictEntry
 {
     pub term: String,
     pub aliases: Option<Vec<String>>,
-    pub definitions: Vec<String>,
+    pub definition: HtmlText,
 }
 
 impl DictEntry

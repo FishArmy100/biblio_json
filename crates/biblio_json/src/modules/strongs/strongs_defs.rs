@@ -2,15 +2,14 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{core::strongs_number::StrongsNumber, utils};
+use crate::{core::{lang::Language, strongs_number::StrongsNumber}, html_text::HtmlText, utils};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct StrongsEntry
+pub struct StrongsDefEntry
 {
     pub strongs_ref: StrongsNumber,
     pub word: String,
-    pub definitions: Vec<String>,
-    pub derivation: Option<String>,
+    pub definition: HtmlText,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -18,10 +17,12 @@ pub struct StrongsEntry
 pub struct StrongsDefsConfig
 {
     pub name: String,
-    pub description: Option<String>,
+    pub authors: Option<Vec<String>>,
+    pub language: Option<Language>,
+    pub description: Option<HtmlText>,
+    pub data_source: Option<String>,
+    pub pub_year: Option<u32>,
     pub license: Option<String>,
-    pub source: Option<String>,
-    pub language: Option<String>,
 }
 
 #[derive(Debug)]
@@ -29,7 +30,7 @@ pub struct StrongsDefsModule
 {
     pub config: StrongsDefsConfig,
     pub index_map: HashMap<StrongsNumber, u32>,
-    pub defs: Vec<StrongsEntry>,
+    pub defs: Vec<StrongsDefEntry>,
 }
 
 impl StrongsDefsModule
@@ -40,7 +41,7 @@ impl StrongsDefsModule
         let config: StrongsDefsConfig = utils::load_toml(config_path)?;
 
         let bible_path = format!("{}/{}.jsonl", dir_path, name);
-        let defs = StrongsEntry::from_file(&bible_path)?;
+        let defs = StrongsDefEntry::from_file(&bible_path)?;
 
         let index_map: HashMap<_, _> = defs.iter().enumerate().map(|(i, d)| {
             (d.strongs_ref.clone(), i as u32)
@@ -53,7 +54,7 @@ impl StrongsDefsModule
         })
     }
 
-    pub fn get_def(&self, num: &StrongsNumber) -> Option<&StrongsEntry>
+    pub fn get_def(&self, num: &StrongsNumber) -> Option<&StrongsDefEntry>
     {
         match self.index_map.get(num)
         {
@@ -63,7 +64,7 @@ impl StrongsDefsModule
     }
 }
 
-impl StrongsEntry
+impl StrongsDefEntry
 {
     pub fn from_file(path: &str) -> Result<Vec<Self>, String>
     {

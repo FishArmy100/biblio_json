@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -161,7 +163,8 @@ impl std::fmt::Display for OsisBook {
     }
 }
 
-impl std::str::FromStr for OsisBook {
+impl FromStr for OsisBook 
+{
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {

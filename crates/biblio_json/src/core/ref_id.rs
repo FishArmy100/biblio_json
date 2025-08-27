@@ -3,6 +3,8 @@ use std::fmt;
 use std::num::NonZeroU32;
 use std::str::FromStr;
 
+use crate::core::{OsisBook, VerseId};
+
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum RefId 
 {
@@ -73,7 +75,7 @@ impl RefId
         }
     }
 
-    pub fn get_verse_components(&self) -> Option<(&str, u32, u32)>
+    pub fn get_verse_components(&self) -> Option<(&OsisBook, u32, u32)>
     {
         if let Self::Single(Atom::Verse { book, chapter, verse }) = self 
         {
@@ -89,10 +91,10 @@ impl RefId
 #[derive(Debug, PartialEq, Clone, Hash, Eq)]
 pub enum Atom 
 {
-    Book { book: String },
-    Chapter { book: String, chapter: NonZeroU32 },
-    Verse { book: String, chapter: NonZeroU32, verse: NonZeroU32 },
-    Word { book: String, chapter: NonZeroU32, verse: NonZeroU32, word: NonZeroU32 },
+    Book { book: OsisBook },
+    Chapter { book: OsisBook, chapter: NonZeroU32 },
+    Verse { book: OsisBook, chapter: NonZeroU32, verse: NonZeroU32 },
+    Word { book: OsisBook, chapter: NonZeroU32, verse: NonZeroU32, word: NonZeroU32 },
 }
 
 impl Atom
@@ -133,7 +135,7 @@ impl Atom
         }
     }
 
-    pub fn book(&self) -> &str 
+    pub fn book(&self) -> &OsisBook 
     {
         match self 
         {
@@ -218,19 +220,19 @@ impl FromStr for Atom
         let parts: Vec<&str> = main.split('.').collect();
         match (parts.len(), word_opt) {
             (1, None) => Ok(Atom::Book {
-                book: parts[0].to_string(),
+                book: parts[0].to_string().parse()?,
             }),
             (2, None) => Ok(Atom::Chapter {
-                book: parts[0].to_string(),
+                book: parts[0].to_string().parse()?,
                 chapter: parts[1].parse().map_err(|_| "Invalid chapter")?,
             }),
             (3, None) => Ok(Atom::Verse {
-                book: parts[0].to_string(),
+                book: parts[0].to_string().parse()?,
                 chapter: parts[1].parse().map_err(|_| "Invalid chapter")?,
                 verse: parts[2].parse().map_err(|_| "Invalid verse")?,
             }),
             (3, Some(word)) => Ok(Atom::Word {
-                book: parts[0].to_string(),
+                book: parts[0].to_string().parse()?,
                 chapter: parts[1].parse().map_err(|_| "Invalid chapter")?,
                 verse: parts[2].parse().map_err(|_| "Invalid verse")?,
                 word: word.parse().map_err(|_| "Invalid word")?,
@@ -259,7 +261,17 @@ impl FromStr for RefId
     }
 }
 
-// --- Custom Serde Support for Ref ---
+impl From<VerseId> for RefId
+{
+    fn from(value: VerseId) -> Self 
+    {
+        RefId::Single(Atom::Verse { 
+            book: value.book, 
+            chapter: value.chapter, 
+            verse: value.verse 
+        })
+    }
+}
 
 impl Serialize for RefId 
 {

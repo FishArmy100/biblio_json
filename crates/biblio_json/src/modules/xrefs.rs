@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{core::RefId, utils};
+use crate::{core::{lang::Language, RefId}, html_text::HtmlText, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -8,11 +8,12 @@ use crate::{core::RefId, utils};
 pub struct XRefsConfig
 {
     pub name: String,
-    pub description: Option<String>,
+    pub authors: Option<Vec<String>>,
+    pub language: Option<Language>,
+    pub description: Option<HtmlText>,
     pub data_source: Option<String>,
-    pub license: Option<String>,
-    pub language: Option<String>,
     pub pub_year: Option<u32>,
+    pub license: Option<String>,
     pub bible_dep: Option<String>,
 }
 
