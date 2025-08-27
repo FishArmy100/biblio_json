@@ -1,7 +1,6 @@
-use std::{collections::HashMap, fmt::Display, str::FromStr};
+use std::collections::HashMap;
 
-use regex::Regex;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
 use crate::{core::strongs_number::StrongsNumber, utils};
 

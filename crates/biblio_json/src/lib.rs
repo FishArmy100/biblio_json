@@ -7,7 +7,7 @@ use std::{collections::HashMap, fmt::Display, path::Path};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{modules::{bible::{BibleModule, Verse}, dict::{DictEntry, DictModule}, strongs::StrongsDefsModule, xrefs::{XRef, XRefModule}, Module}, core::{Atom, RefId}};
+use crate::{modules::{bible::{BibleModule, Verse}, dict::{DictEntry, DictModule}, strongs::StrongsDefsModule, xrefs::{XRef, XRefModule}, Module}, core::RefId};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
