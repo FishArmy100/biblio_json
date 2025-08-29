@@ -11,6 +11,7 @@ pub struct StrongsDefEntry
     pub strongs_ref: StrongsNumber,
     pub word: String,
     pub definitions: Vec<HtmlText>,
+    pub derivation: Option<HtmlText>,
     pub id: u32,
 }
 
