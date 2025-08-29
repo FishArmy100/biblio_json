@@ -4,15 +4,36 @@ pub mod xrefs;
 pub mod strongs;
 pub mod commentary;
 
-use std::sync::Arc;
+use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use bible::BibleModule;
 
-use crate::modules::{commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule};
+use crate::{core::RefId, modules::{commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}};
 
 pub enum ModuleValidationError
 {
-    
+    BibleNotFound(String),
+    WordRefIdInvalid(RefId),
+    RefIdDoesNotExist(RefId, String),
+}
+
+impl Display for ModuleValidationError
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
+    {
+        match self 
+        {
+            ModuleValidationError::BibleNotFound(name) => write!(f, "Bible '{}' does not exist.", name),
+            ModuleValidationError::WordRefIdInvalid(ref_id) => write!(f, "RefId {} with word indexes is not valid in this context.", ref_id),
+            ModuleValidationError::RefIdDoesNotExist(ref_id, bible) => write!(f, "RefId {} does not exist in bible '{}'", ref_id, bible),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct ModuleValidationContext<'a>
+{
+    pub bibles: &'a HashMap<String, Arc<BibleModule>>,
 }
 
 #[derive(Debug)]
@@ -149,15 +170,15 @@ impl Module
         }
     }
 
-    pub fn validate(&self) -> Result<(), Vec<ModuleValidationError>>
+    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
     {
         match self 
         {
             Module::Bible(_) => Ok(()),
             Module::Dictionary(_) => Ok(()),
-            Module::XRef(xref_module) => todo!(),
-            Module::StrongsDefs(strongs_defs_module) => todo!(),
-            Module::StrongsLinks(strongs_links_module) => todo!(),
+            Module::XRef(xref_module) => xref_module.validate(context),
+            Module::StrongsDefs(_) => Ok(()),
+            Module::StrongsLinks(strongs_links) => strongs_links.validate(context),
             Module::Commentary(commentary_module) => todo!(),
         }
     }

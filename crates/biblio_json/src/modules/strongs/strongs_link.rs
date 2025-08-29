@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display, num::NonZeroU32, str::FromStr};
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{core::{StrongsNumber, VerseId, lang::Language}, html_text::HtmlText, utils};
+use crate::{core::{RefId, StrongsNumber, VerseId, lang::Language}, html_text::HtmlText, modules::{ModuleValidationContext, ModuleValidationError}, utils};
 
 lazy_static::lazy_static!
 {
@@ -60,6 +60,48 @@ impl StrongsLinksModule
         {
             Some(idx) => Some(&self.links[*idx as usize]),
             None => None
+        }
+    }
+
+    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    {
+        let bible_name = &self.config.bible;
+        let Some(bible) = context.bibles.get(bible_name) else
+        {
+            return Err(vec![ModuleValidationError::BibleNotFound(bible_name.clone())])
+        };
+
+        let mut all_refs = vec![];
+        for l in self.links
+        {
+            for w in l.words
+            {
+                match w.range
+                {
+                    WordRange::Single(word) => {
+                        all_refs.push(RefId::from_verse_id(l.verse_id, Some(word)));
+                    },
+                    WordRange::Range(start, end) => todo!(),
+                }
+            }
+        }
+
+        let mut errors = vec![];
+        for r in self.links.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
+        {
+            if !bible.source.id_exists(&r)
+            {
+                errors.push(ModuleValidationError::RefIdDoesNotExist(r, bible_name.clone()));
+            }
+        }
+
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(())    
         }
     }
 }

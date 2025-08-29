@@ -5,7 +5,7 @@ use std::str::FromStr;
 
 use crate::core::{OsisBook, VerseId};
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
 pub enum RefId 
 {
     Single(Atom),
@@ -27,6 +27,24 @@ impl RefId
                 (Atom::Word { book: _, chapter: _, verse: _, word: _ }, Atom::Word { book: _, chapter: _, verse: _, word: _ }) => true,
                 _ => false,
             }
+        }
+    }
+
+    pub fn from_verse_id(verse: VerseId, word: Option<NonZeroU32>) -> Self
+    {
+        match word
+        {
+            Some(word) => Self::Single(Atom::Word { 
+                book: verse.book, 
+                chapter: verse.chapter, 
+                verse: verse.verse,
+                 word: word 
+            }),
+            None => Self::Single(Atom::Verse { 
+                book: verse.book, 
+                chapter: verse.chapter, 
+                verse: verse.verse,
+            }),
         }
     }
 
@@ -88,7 +106,7 @@ impl RefId
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq)]
+#[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
 pub enum Atom 
 {
     Book { book: OsisBook },

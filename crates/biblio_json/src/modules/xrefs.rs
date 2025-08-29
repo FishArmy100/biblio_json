@@ -1,6 +1,9 @@
+use std::{collections::HashMap, sync::Arc};
+
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{lang::Language, RefId}, html_text::HtmlText, utils};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ModuleValidationContext, ModuleValidationError, bible::BibleModule}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -32,7 +35,6 @@ pub enum XRef
     Directed 
     {
         source: RefId,
-        source_text: Option<String>,
         targets: Vec<RefId>,
         note: Option<String>,
     },
@@ -59,8 +61,20 @@ impl XRef
     {
         match self 
         {
-            Self::Directed { source, source_text: _, targets: _, note: _ } => source == id,
+            Self::Directed { source, targets: _, note: _ } => source == id,
             Self::Mutual { refs, note: _ } => refs.iter().find(|r| r.id == *id).is_some()
+        }
+    }
+
+    pub fn collect_ref_ids(&self) -> Vec<RefId>
+    {
+        match self {
+            XRef::Directed { source, targets, note: _ } => {
+                let mut ids = targets.iter().map(|t| t.clone()).collect_vec();
+                ids.push(source.clone());
+                ids
+            },
+            XRef::Mutual { refs, note: _ } => refs.iter().map(|r| r.id.clone()).collect_vec(),
         }
     }
 }
@@ -86,5 +100,54 @@ impl XRefModule
             config,
             refs,
         })
+    }
+
+    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    {
+        if let Some(bible_name) = &self.config.bible_dep
+        {
+            let Some(bible) = context.bibles.get(bible_name) else
+            {
+                return Err(vec![ModuleValidationError::BibleNotFound(bible_name.clone())])
+            };
+
+            let mut errors = vec![];
+            for r in self.refs.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
+            {
+                if !bible.source.id_exists(&r)
+                {
+                    errors.push(ModuleValidationError::RefIdDoesNotExist(r, bible_name.clone()));
+                }
+            }
+
+            if errors.len() > 0
+            {
+                Err(errors)
+            }
+            else 
+            {
+                Ok(())    
+            }
+        }
+        else  
+        {
+            let mut errors = vec![];
+            for r in self.refs.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
+            {
+                if r.is_word()
+                {
+                    errors.push(ModuleValidationError::WordRefIdInvalid(r));
+                }
+            }
+
+            if errors.len() > 0
+            {
+                Err(errors)
+            }
+            else 
+            {
+                Ok(())    
+            }
+        }
     }
 }

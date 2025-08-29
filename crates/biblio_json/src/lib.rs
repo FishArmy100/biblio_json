@@ -3,11 +3,9 @@ pub mod modules;
 pub mod core;
 pub mod html_text;
 use std::{collections::HashMap, fmt::Display, path::Path, sync::Arc};
-
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::RefId, modules::{Module, bible::BibleModule, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::{XRef, XRefModule}}};
+use crate::{core::RefId, modules::{Module, ModuleValidationContext, ModuleValidationError, bible::BibleModule, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::{XRef, XRefModule}}};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -33,56 +31,48 @@ pub struct ModulePaths
     pub commentaries: Option<String>,
 }
 
-pub enum PackageValidationError
-{
-    InvalidRefId
-    {
-        id: RefId,
-        bible_name: String,
-        xref_name: String,
-        line: usize,
-    }
-}
+// #[derive(Debug, Clone)]
+// pub struct LoadPackageError
+// {
+//     pub file: Option<String>,
+//     pub message: String,
+// }
 
-impl Display for PackageValidationError
+pub enum LoadPackageError
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
-    {
-        match self 
-        {
-            Self::InvalidRefId { id, bible_name, xref_name, line } => {
-                write!(f, "RefId {} in xref module {} on line {} does not exist in Bible {}", id, xref_name, line, bible_name)
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct LoadPackageError
-{
-    pub file: Option<String>,
-    pub message: String,
-}
-
-impl LoadPackageError
-{
-    pub fn new(message: String) -> Self 
-    {
-        Self {
-            file: None,
-            message,
-        }
-    }
+    ModuleLoadingError {
+        path: String,
+        error: String,
+    },
+    ModuleValidationError {
+        name: String,
+        error: ModuleValidationError,
+    },
+    PackagePathNotDirectory(String),
+    PackageConfigNotFound(String),
+    PackageConfigError {
+        path: String,
+        error: String,
+    },
+    GlobError(String),
+    ExpectedParent(String),
+    ExpectedStem(String),
 }
 
 impl Display for LoadPackageError
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
     {
-        match &self.file
+        match self 
         {
-            Some(file) => write!(f, "Error in file {}\n{}", file, self.message),
-            None => write!(f, "{}", self.message)
+            LoadPackageError::ModuleLoadingError { path, error } => write!(f, "Error loading module '{}':\n{}", path, error),
+            LoadPackageError::ModuleValidationError { name: path, error } => write!(f, "Validation error in module '{}': {}", path, error),
+            LoadPackageError::PackagePathNotDirectory(path) => write!(f, "Package path '{}' is not a directory.", path),
+            LoadPackageError::PackageConfigNotFound(path) => write!(f, "Package config not found at path '{}'", path),
+            LoadPackageError::PackageConfigError { path, error } => write!(f, "Error loading package config '{}':\n{}", path, error),
+            LoadPackageError::GlobError(error) => write!(f, "Glob error: {}", error),
+            LoadPackageError::ExpectedParent(path) => write!(f, "Expected file {} to have a parent", path),
+            LoadPackageError::ExpectedStem(path) => write!(f, "Expected file {} to have a stem", path),
         }
     }
 }
@@ -104,24 +94,26 @@ impl Package
 
         if !path.is_dir()
         {
-            return Err(vec![LoadPackageError::new(format!("Provided path: {dir_path}, must be a directory"))]);
+            return Err(vec![LoadPackageError::PackagePathNotDirectory(dir_path.to_owned())]);
         }
 
         let config_path = path.join(Path::new(PACKAGE_FILE_NAME));
-        let file = utils::load_file(&config_path).map_err(|e| vec![LoadPackageError {
-            file: config_path.to_str().map(|s| s.to_owned()),
-            message: e.to_string(),
-        }])?;
+        let file = utils::load_file(&config_path).map_err(|e| vec![LoadPackageError::PackageConfigNotFound(e)])?;
         
         let config = match toml::from_str::<PackageConfig>(&file) {
             Ok(ok) => ok,
-            Err(e) => return Err(vec![LoadPackageError::new(e.to_string())])
+            Err(e) => return Err(vec![LoadPackageError::PackageConfigError {
+                path: config_path.to_str().unwrap().to_owned(),
+                error: e.to_string(),
+            }])
         };
 
         let modules = match &config.module_paths {
             Some(paths) => Self::load_modules(dir_path, paths)?,
             None => vec![]
         };
+
+        Self::validate_modules(&modules)?;
 
         Ok(Self {
             name: config.name,
@@ -134,6 +126,39 @@ impl Package
     pub fn get_mod(&self, name: &str) -> Option<&Module>
     {
         self.modules.get(name)
+    }
+
+    fn validate_modules(modules: &Vec<Module>) -> Result<(), Vec<LoadPackageError>>
+    {
+        let bibles = modules.iter().filter_map(|m| match m {
+            Module::Bible(b) => Some(b.clone()),
+            _ => None,
+        }).map(|b| (b.config.name.clone(), b)).collect::<HashMap<_, _>>();
+
+        let context = ModuleValidationContext {
+            bibles: &bibles
+        };
+
+        let mut errors = vec![];
+        for m in modules
+        {
+            if let Err(errs) = m.validate(&context)
+            {
+                errors.extend(errs.into_iter().map(|error| LoadPackageError::ModuleValidationError { 
+                    name: m.get_name().to_string(), 
+                    error,
+                }));
+            }
+        }
+
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(())    
+        }
     }
 
     fn load_modules(root: &str, paths: &ModulePaths) -> Result<Vec<Module>, Vec<LoadPackageError>>
@@ -232,68 +257,15 @@ impl Package
         }
     }
 
-    pub fn validate(&self) -> Result<(), Vec<PackageValidationError>>
-    {
-        let mut errors = vec![];
-
-        let bibles = self.modules.values().filter_map(|m| match m {
-            Module::Bible(b) => Some(b),
-            _ => None,
-        }).collect_vec();
-
-        let xrefs = self.modules.values().filter_map(|m| match m {
-            Module::XRef(b) => Some(b),
-            _ => None,
-        }).collect_vec();
-
-        for bible in bibles
-        {
-            let bible_name = &bible.config.name;
-            for xref in &xrefs
-            {
-                let xref_name = &xref.config.name;
-
-                xref.refs.iter().enumerate().map(|(i, r)| match r {
-                    XRef::Directed { source, source_text: _, targets, note: _ } => {
-                        let mut ids = targets.iter().map(|t| (i, t.clone())).collect_vec();
-                        ids.push((i, source.clone()));
-                        ids
-                    },
-                    XRef::Mutual { refs, note: _ } => refs.iter().map(|r| (i, r.id.clone())).collect_vec(),
-                })
-                .flatten()
-                .for_each(|(i, id)| {
-                    if !bible.source.id_exists(&id)
-                    {
-                        errors.push(PackageValidationError::InvalidRefId { 
-                            id: id.clone(), 
-                            bible_name: bible_name.clone(), 
-                            xref_name: xref_name.clone(),
-                            line: i + 1,
-                        });
-                    }
-                });
-            }
-        }
-
-        if errors.len() > 0
-        {
-            Err(errors)
-        }
-        else 
-        {
-            Ok(())    
-        }
-    }
-
     fn load_module(base_dir: &str, pattern: &str, f: impl Fn(&str, &str) -> Result<Module, String>) -> Result<Vec<Module>, LoadPackageError>
     {
         let full_path = format!("{}/{}", base_dir, pattern);
 
-        glob::glob(&full_path).map_err(|e| LoadPackageError::new(e.to_string()))?.filter_map(|entry| -> Option<Result<Module, LoadPackageError>> {
+        let paths = glob::glob(&full_path).map_err(|e| LoadPackageError::GlobError(e.to_string()))?;
+        paths.filter_map(|entry| -> Option<Result<Module, LoadPackageError>> {
             let entry = match entry {
                 Ok(ok) => ok,
-                Err(e) => return Some(Err(LoadPackageError::new(e.to_string()))),
+                Err(e) => return Some(Err(LoadPackageError::GlobError(e.to_string()))),
             };
 
             let path = Path::new(&entry);
@@ -306,17 +278,17 @@ impl Package
             
             let dir = match path.parent() {
                 Some(s) => s,
-                None => return Some(Err(LoadPackageError::new(format!("Expected path {} to have a parent", path.display()))))
+                None => return Some(Err(LoadPackageError::ExpectedParent(path.display().to_string())))
             }.to_str().unwrap();
 
             let name = match path.file_stem() {
                 Some(s) => s,
-                None => return Some(Err(LoadPackageError::new(format!("Expected path {} to have a stem", path.display()))))
+                None => return Some(Err(LoadPackageError::ExpectedStem(path.display().to_string())))
             }.to_str().unwrap();
 
-            Some(f(dir, name).map_err(|e| LoadPackageError { 
-                file: path.canonicalize().ok().map(|p| p.display().to_string()), 
-                message: e
+            Some(f(dir, name).map_err(|e| LoadPackageError::ModuleLoadingError { 
+                path: path.canonicalize().ok().map(|p| p.display().to_string()).unwrap(), 
+                error: e
             }))
         }).collect()
     }
