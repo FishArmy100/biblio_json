@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ModuleValidationContext, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CommentaryConfig
 {
     pub name: String,
@@ -89,6 +90,7 @@ impl CommentaryModule
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct CommentaryEntry
 {
     pub id: u32,

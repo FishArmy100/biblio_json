@@ -1,9 +1,7 @@
-use std::{collections::HashMap, sync::Arc};
-
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ModuleValidationContext, ModuleValidationError, bible::BibleModule}, utils};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ModuleValidationContext, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -21,15 +19,8 @@ pub struct XRefsConfig
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(rename_all = "snake_case")]
-pub struct MutualRef
-{
-    pub id: RefId,
-    pub text: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub enum XRef 
 {
     Directed 
@@ -37,11 +28,13 @@ pub enum XRef
         source: RefId,
         targets: Vec<RefId>,
         note: Option<String>,
+        id: u32,
     },
     Mutual 
     {
-        refs: Vec<MutualRef>,
+        refs: Vec<RefId>,
         note: Option<String>,
+        id: u32,
     },
 }
 
@@ -57,24 +50,33 @@ impl XRef
         Ok(ret)
     }
 
-    pub fn has_source(&self, id: &RefId) -> bool
+    pub fn has_source(&self, ref_id: &RefId) -> bool
     {
         match self 
         {
-            Self::Directed { source, targets: _, note: _ } => source == id,
-            Self::Mutual { refs, note: _ } => refs.iter().find(|r| r.id == *id).is_some()
+            Self::Directed { source, targets: _, note: _, id: _ } => source == ref_id,
+            Self::Mutual { refs, note: _, id: _ } => refs.iter().find(|r| **r == *ref_id).is_some()
+        }
+    }
+
+    pub fn id(&self) -> u32 
+    {
+        match self 
+        {
+            XRef::Directed { source: _, targets: _, note: _, id } => *id,
+            XRef::Mutual { refs: _, note: _, id } => *id,
         }
     }
 
     pub fn collect_ref_ids(&self) -> Vec<RefId>
     {
         match self {
-            XRef::Directed { source, targets, note: _ } => {
+            XRef::Directed { source, targets, note: _, id: _ } => {
                 let mut ids = targets.iter().map(|t| t.clone()).collect_vec();
                 ids.push(source.clone());
                 ids
             },
-            XRef::Mutual { refs, note: _ } => refs.iter().map(|r| r.id.clone()).collect_vec(),
+            XRef::Mutual { refs, note: _, id: _ } => refs.iter().map(|r| r.clone()).collect_vec(),
         }
     }
 }

@@ -173,6 +173,7 @@ impl BibleSource
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct Verse
 {
     pub id: RefId,
@@ -181,6 +182,7 @@ pub struct Verse
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct Word 
 {
     pub red: Option<bool>,

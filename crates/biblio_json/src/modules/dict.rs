@@ -17,11 +17,13 @@ pub struct DictConfig
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct DictEntry
 {
     pub term: String,
     pub aliases: Option<Vec<String>>,
     pub definitions: Vec<HtmlText>,
+    pub id: u32,
 }
 
 impl DictEntry

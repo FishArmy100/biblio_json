@@ -5,11 +5,13 @@ use serde::{Deserialize, Serialize};
 use crate::{core::{lang::Language, strongs_number::StrongsNumber}, html_text::HtmlText, utils};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(deny_unknown_fields)]
 pub struct StrongsDefEntry
 {
     pub strongs_ref: StrongsNumber,
     pub word: String,
     pub definitions: Vec<HtmlText>,
+    pub id: u32,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

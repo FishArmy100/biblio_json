@@ -5,7 +5,7 @@ pub mod html_text;
 use std::{collections::HashMap, fmt::Display, path::Path, sync::Arc};
 use serde::{Deserialize, Serialize};
 
-use crate::{core::RefId, modules::{Module, ModuleValidationContext, ModuleValidationError, bible::BibleModule, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::{XRef, XRefModule}}};
+use crate::{modules::{Module, ModuleValidationContext, ModuleValidationError, bible::BibleModule, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
