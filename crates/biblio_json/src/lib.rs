@@ -57,6 +57,7 @@ pub enum LoadPackageError
     GlobError(String),
     ExpectedParent(String),
     ExpectedStem(String),
+    PackagePathDoesNotExist(String),
 }
 
 impl Display for LoadPackageError
@@ -73,6 +74,16 @@ impl Display for LoadPackageError
             LoadPackageError::GlobError(error) => write!(f, "Glob error: {}", error),
             LoadPackageError::ExpectedParent(path) => write!(f, "Expected file {} to have a parent", path),
             LoadPackageError::ExpectedStem(path) => write!(f, "Expected file {} to have a stem", path),
+            LoadPackageError::PackagePathDoesNotExist(path) => {
+                if let Some(cwd) = std::env::current_dir().map(|p| p.display().to_string()).ok()
+                {
+                    write!(f, "Path for package does not exist '{}' in current directory '{}'", path, cwd) 
+                }
+                else 
+                {
+                    write!(f, "Path for package does not exist '{}'", path)    
+                }
+            },
         }
     }
 }
@@ -92,9 +103,14 @@ impl Package
     {
         let path = Path::new(dir_path);
 
+        if !path.exists()
+        {
+            return Err(vec![LoadPackageError::PackagePathDoesNotExist(path.display().to_string())]);
+        }
+
         if !path.is_dir()
         {
-            return Err(vec![LoadPackageError::PackagePathNotDirectory(dir_path.to_owned())]);
+            return Err(vec![LoadPackageError::PackagePathNotDirectory(path.display().to_string())]);
         }
 
         let config_path = path.join(Path::new(PACKAGE_FILE_NAME));

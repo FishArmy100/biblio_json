@@ -179,7 +179,7 @@ impl Module
             Module::XRef(xref_module) => xref_module.validate(context),
             Module::StrongsDefs(_) => Ok(()),
             Module::StrongsLinks(strongs_links) => strongs_links.validate(context),
-            Module::Commentary(commentary_module) => todo!(),
+            Module::Commentary(commentary_module) => commentary_module.validate(context),
         }
     }
 }

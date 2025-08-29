@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, lang::Language}, html_text::HtmlText, utils};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ModuleValidationContext, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CommentaryConfig
@@ -36,6 +36,55 @@ impl CommentaryModule
             config,
             entries,
         })
+    }
+
+    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    {
+        if let Some(bible_name) = &self.config.bible
+        {
+            let Some(bible) = context.bibles.get(bible_name) else
+            {
+                return Err(vec![ModuleValidationError::BibleNotFound(bible_name.clone())])
+            };
+
+            let mut errors = vec![];
+            for r in self.entries.iter().map(|e| e.references.iter()).flatten()
+            {
+                if !bible.source.id_exists(&r)
+                {
+                    errors.push(ModuleValidationError::RefIdDoesNotExist(*r, bible_name.clone()));
+                }
+            }
+
+            if errors.len() > 0
+            {
+                Err(errors)
+            }
+            else 
+            {
+                Ok(())    
+            }
+        }
+        else  
+        {
+            let mut errors = vec![];
+            for r in self.entries.iter().map(|e| e.references.iter()).flatten()
+            {
+                if r.is_word()
+                {
+                    errors.push(ModuleValidationError::WordRefIdInvalid(*r));
+                }
+            }
+
+            if errors.len() > 0
+            {
+                Err(errors)
+            }
+            else 
+            {
+                Ok(())    
+            }
+        }
     }
 }
 

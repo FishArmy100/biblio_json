@@ -17,7 +17,7 @@ pub struct XRefsConfig
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
     pub license: Option<String>,
-    pub bible_dep: Option<String>,
+    pub bible: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -104,7 +104,7 @@ impl XRefModule
 
     pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
     {
-        if let Some(bible_name) = &self.config.bible_dep
+        if let Some(bible_name) = &self.config.bible
         {
             let Some(bible) = context.bibles.get(bible_name) else
             {

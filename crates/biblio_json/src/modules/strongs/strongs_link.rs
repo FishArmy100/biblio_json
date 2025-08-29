@@ -72,22 +72,25 @@ impl StrongsLinksModule
         };
 
         let mut all_refs = vec![];
-        for l in self.links
+        for l in &self.links
         {
-            for w in l.words
+            for w in &l.words
             {
                 match w.range
                 {
                     WordRange::Single(word) => {
                         all_refs.push(RefId::from_verse_id(l.verse_id, Some(word)));
                     },
-                    WordRange::Range(start, end) => todo!(),
+                    WordRange::Range(start, end) => {
+                        all_refs.push(RefId::from_verse_id(l.verse_id, Some(start)));
+                        all_refs.push(RefId::from_verse_id(l.verse_id, Some(end)));
+                    },
                 }
             }
         }
 
         let mut errors = vec![];
-        for r in self.links.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
+        for r in all_refs
         {
             if !bible.source.id_exists(&r)
             {
