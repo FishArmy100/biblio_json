@@ -135,7 +135,7 @@ impl Package
             name: config.name,
             authors: config.authors,
             license: config.license,
-            modules: modules.into_iter().map(|m| (m.get_name().to_owned(), m)).collect()
+            modules: modules.into_iter().map(|m| (m.name().to_owned(), m)).collect()
         })
     }
 
@@ -161,7 +161,7 @@ impl Package
             if let Err(errs) = m.validate(&context)
             {
                 errors.extend(errs.into_iter().map(|error| LoadPackageError::ModuleValidationError { 
-                    name: m.get_name().to_string(), 
+                    name: m.name().to_string(), 
                     error,
                 }));
             }

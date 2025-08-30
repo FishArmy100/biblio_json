@@ -1,6 +1,6 @@
-use std::fmt;
+use std::{fmt, str::FromStr};
 
-use crate::html_text::{HtmlText, ast::{Block, Inline}, lex::Token};
+use crate::html_text::{HtmlText, ast::{Block, HRefSrc, AssetIdName, Inline}, lex::Token};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorKind 
@@ -206,6 +206,10 @@ impl Parser
                                 })?
                                 .clone();
                             let content = self.parse_inlines_until("a")?;
+                            let href = HRefSrc::from_str(&href).map_err(|e| ParseError { 
+                                kind: ErrorKind::InvalidAttrs(e),
+                                pos: self.pos,
+                            })?;
                             v.push(Inline::Anchor { href, content });
                         }
                         // nested block-level tags are not allowed inside inlines here
@@ -229,6 +233,11 @@ impl Parser
                                 })?
                                 .clone();
                             let alt = attrs.get("alt").cloned();
+
+                            let src = AssetIdName::from_str(&src).map_err(|e| ParseError { 
+                                kind: ErrorKind::InvalidAttrs(e),
+                                pos: self.pos,
+                            })?;
                             v.push(Inline::Image { src, alt });
                         }
                         other => return Err(ParseError { kind: ErrorKind::UnsupportedTag(other.to_string()), pos: self.pos }),

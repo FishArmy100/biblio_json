@@ -1,7 +1,7 @@
 use itertools::{EitherOrBoth, Itertools};
 use serde::{Deserialize, Serialize};
 
-use crate::{core::lang::Language, html_text::HtmlText, utils};
+use crate::{core::lang::Language, html_text::HtmlText, modules::ExternalModuleData, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -14,6 +14,8 @@ pub struct DictConfig
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
     pub license: Option<String>,
+    #[serde(default)]
+    pub external: ExternalModuleData,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

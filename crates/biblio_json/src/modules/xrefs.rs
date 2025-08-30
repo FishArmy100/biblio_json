@@ -1,7 +1,7 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ModuleValidationContext, ModuleValidationError}, utils};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -16,6 +16,8 @@ pub struct XRefsConfig
     pub pub_year: Option<u32>,
     pub license: Option<String>,
     pub bible: Option<String>,
+    #[serde(default)]
+    pub external: ExternalModuleData,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

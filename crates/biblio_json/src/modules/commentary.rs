@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ModuleValidationContext, ModuleValidationError}, utils};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -14,6 +14,8 @@ pub struct CommentaryConfig
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
     pub license: Option<String>,
+    #[serde(default)]
+    pub external: ExternalModuleData,
 }
 
 #[derive(Debug)]

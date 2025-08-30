@@ -21,10 +21,10 @@ pub mod lex;
 pub mod parse;
 pub mod ast;
 
-use std::{fmt, ops::Deref, str::FromStr};
+use std::{collections::HashMap, fmt, ops::Deref, str::FromStr};
 use serde::{Deserialize, Serialize};
 
-use crate::html_text::{ast::Block, lex::Lexer, parse::{ParseError, Parser}};
+use crate::html_text::{ast::{AssetIdName, Block}, lex::Lexer, parse::{ParseError, Parser}};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HtmlText(Vec<Block>);

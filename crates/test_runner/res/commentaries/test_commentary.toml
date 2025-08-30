@@ -1,0 +1,12 @@
+name = "Test Commentary"
+description = """
+
+<p>
+    <img src="ascribe_logo">
+    <a href="Gen.1.1">Hello World!</a>
+</p>
+
+"""
+
+[external.assets]
+ascribe_logo = "./resources/ascribe_logo.png"

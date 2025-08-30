@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display, num::NonZeroU32, str::FromStr};
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{core::{RefId, StrongsNumber, VerseId, lang::Language}, html_text::HtmlText, modules::{ModuleValidationContext, ModuleValidationError}, utils};
+use crate::{core::{RefId, StrongsNumber, VerseId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
 
 lazy_static::lazy_static!
 {
@@ -23,6 +23,8 @@ pub struct StrongsLinkConfig
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
     pub license: Option<String>,
+    #[serde(default)]
+    pub external: ExternalModuleData,
 }
 
 #[derive(Debug)]

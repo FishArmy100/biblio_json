@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, num::NonZeroU32};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{lang::Language, Atom, OsisBook, RefId}, html_text::HtmlText, utils};
+use crate::{core::{Atom, OsisBook, RefId, lang::Language}, html_text::HtmlText, modules::ExternalModuleData, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -17,6 +17,8 @@ pub struct BibleConfig
     pub pub_year: Option<u32>,
     pub license: Option<String>,
     pub books: HashMap<OsisBook, String>,
+    #[serde(default)]
+    pub external: ExternalModuleData,
 }
 
 #[derive(Debug)]
