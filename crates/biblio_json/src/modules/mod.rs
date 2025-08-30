@@ -8,6 +8,7 @@ use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use bible::BibleModule;
 use serde::{Deserialize, Serialize};
+use serde_with::serde_as;
 
 use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, ast::AssetIdName}, modules::{commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}};
 
@@ -15,10 +16,13 @@ use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, ast::AssetIdNam
 #[serde(deny_unknown_fields)]
 pub struct ExternalModuleData
 {
+    #[serde(default)]
     pub modules: HashMap<AssetIdName, String>,
+    #[serde(default)]
     pub assets: HashMap<AssetIdName, String>,
 }
 
+#[derive(Debug)]
 pub enum ModuleValidationError
 {
     BibleNotFound(String),
@@ -45,15 +49,16 @@ pub struct ModuleValidationContext<'a>
     pub bibles: &'a HashMap<String, Arc<BibleModule>>,
 }
 
-#[derive(Debug)]
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Module
 {
-    Bible(Arc<BibleModule>),
-    Dictionary(Arc<DictModule>),
-    XRef(Arc<XRefModule>),
-    StrongsDefs(Arc<StrongsDefsModule>),
-    StrongsLinks(Arc<StrongsLinksModule>),
-    Commentary(Arc<CommentaryModule>)
+    Bible(#[serde_as(as = "Arc<_>")] Arc<BibleModule>),
+    Dictionary(#[serde_as(as = "Arc<_>")] Arc<DictModule>),
+    XRef(#[serde_as(as = "Arc<_>")] Arc<XRefModule>),
+    StrongsDefs(#[serde_as(as = "Arc<_>")] Arc<StrongsDefsModule>),
+    StrongsLinks(#[serde_as(as = "Arc<_>")] Arc<StrongsLinksModule>),
+    Commentary(#[serde_as(as = "Arc<_>")] Arc<CommentaryModule>)
 }
 
 impl Module

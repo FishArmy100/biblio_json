@@ -1,9 +1,10 @@
 name = "This is a test package"
 authors = [ "Nate Craver" ]
-license = "We dont need no stinking license"
+license = "We don't need no stinking license"
 
 [module_paths]
 bibles = "/bibles/*"
 dictionaries = "/dictionaries/*"
 xrefs = "/cross_references/*"
 strongs_defs = "/strongs/*"
+commentaries = "/commentaries/*"

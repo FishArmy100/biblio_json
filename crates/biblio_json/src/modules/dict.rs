@@ -41,7 +41,7 @@ impl DictEntry
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct DictModule
 {
     pub config: DictConfig,
@@ -50,7 +50,7 @@ pub struct DictModule
 
 impl DictModule
 {
-    pub fn load(dir_path: &str, name: &str) -> Result<Self, String>
+    pub fn load_json(dir_path: &str, name: &str) -> Result<Self, String>
     {
         let config_path = format!("{}/{}.toml", dir_path, name);
         let config: DictConfig = utils::load_toml(config_path)?;

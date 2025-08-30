@@ -18,7 +18,7 @@ pub struct CommentaryConfig
     pub external: ExternalModuleData,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CommentaryModule
 {
     pub config: CommentaryConfig,
@@ -27,7 +27,7 @@ pub struct CommentaryModule
 
 impl CommentaryModule
 {
-    pub fn load(dir_path: &str, name: &str) -> Result<Self, String>
+    pub fn load_json(dir_path: &str, name: &str) -> Result<Self, String>
     {
         let config_path = format!("{}/{}.toml", dir_path, name);
         let config: CommentaryConfig = utils::load_toml(config_path)?;

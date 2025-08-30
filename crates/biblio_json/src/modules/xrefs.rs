@@ -1,5 +1,6 @@
 use itertools::Itertools;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::de::Error;
 
 use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
 
@@ -20,9 +21,7 @@ pub struct XRefsConfig
     pub external: ExternalModuleData,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-#[serde(tag = "type", rename_all = "snake_case")]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone)]
 pub enum XRef 
 {
     Directed 
@@ -83,7 +82,140 @@ impl XRef
     }
 }
 
-#[derive(Debug)]
+impl Serialize for XRef {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where S: Serializer {
+        // Use human-readable (JSON) for tagged, otherwise compact for bincode
+        if serializer.is_human_readable() {
+            // Use the default derived implementation for JSON
+            #[derive(Serialize)]
+            #[serde(tag = "type", rename_all = "snake_case")]
+            enum Helper<'a> 
+            {
+                Directed 
+                {
+                    source: &'a RefId,
+                    targets: &'a Vec<RefId>,
+                    note: &'a Option<String>,
+                    id: u32,
+                },
+                Mutual 
+                {
+                    refs: &'a Vec<RefId>,
+                    note: &'a Option<String>,
+                    id: u32,
+                },
+            }
+            match self 
+            {
+                XRef::Directed { source, targets, note, id } => 
+                {
+                    Helper::Directed { source, targets, note, id: *id }.serialize(serializer)
+                }
+                XRef::Mutual { refs, note, id } => 
+                {
+                    Helper::Mutual { refs, note, id: *id }.serialize(serializer)
+                }
+            }
+        } 
+        else 
+        {
+            // Compact binary for bincode
+            match self 
+            {
+                XRef::Directed { source, targets, note, id } => 
+                {
+                    (0u8, source, targets, note, id).serialize(serializer)
+                }
+                XRef::Mutual { refs, note, id } => 
+                {
+                    (1u8, refs, note, id).serialize(serializer)
+                }
+            }
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for XRef 
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de> 
+    {
+        if deserializer.is_human_readable() 
+        {
+            #[derive(Deserialize)]
+            #[serde(tag = "type", rename_all = "snake_case")]
+            enum Helper 
+            {
+                Directed 
+                {
+                    source: RefId,
+                    targets: Vec<RefId>,
+                    note: Option<String>,
+                    id: u32,
+                },
+                Mutual 
+                {
+                    refs: Vec<RefId>,
+                    note: Option<String>,
+                    id: u32,
+                },
+            }
+            match Helper::deserialize(deserializer)? 
+            {
+                Helper::Directed { source, targets, note, id } => Ok(XRef::Directed { source, targets, note, id }),
+                Helper::Mutual { refs, note, id } => Ok(XRef::Mutual { refs, note, id }),
+            }
+        } 
+        else 
+        {
+            use serde::de::SeqAccess;
+            use serde::de::Visitor;
+            use std::fmt;
+
+            struct XRefVisitor;
+
+            impl<'de> Visitor<'de> for XRefVisitor 
+            {
+                type Value = XRef;
+
+                fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result 
+                {
+                    formatter.write_str("XRef tuple")
+                }
+
+                fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+                    where A: SeqAccess<'de>,
+                {
+                    let tag: u8 = seq.next_element()?.ok_or_else(|| A::Error::custom("missing tag"))?;
+                    match tag 
+                    {
+                        0 => 
+                        {
+                            let source: RefId = seq.next_element()?.ok_or_else(|| A::Error::custom("missing source"))?;
+                            let targets: Vec<RefId> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing targets"))?;
+                            let note: Option<String> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing note"))?;
+                            let id: u32 = seq.next_element()?.ok_or_else(|| A::Error::custom("missing id"))?;
+                            Ok(XRef::Directed { source, targets, note, id })
+                        }
+                        1 => 
+                        {
+                            let refs: Vec<RefId> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing refs"))?;
+                            let note: Option<String> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing note"))?;
+                            let id: u32 = seq.next_element()?.ok_or_else(|| A::Error::custom("missing id"))?;
+                            Ok(XRef::Mutual { refs, note, id })
+                        }
+                        _ => Err(A::Error::custom("invalid tag for XRef")),
+                    }
+                }
+            }
+
+            deserializer.deserialize_tuple(5, XRefVisitor)
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 pub struct XRefModule
 {
     pub config: XRefsConfig,
@@ -92,7 +224,7 @@ pub struct XRefModule
 
 impl XRefModule
 {
-    pub fn load(dir_path: &str, name: &str) -> Result<Self, String>
+    pub fn load_json(dir_path: &str, name: &str) -> Result<Self, String>
     {
         let config_path = format!("{}/{}.toml", dir_path, name);
         let config: XRefsConfig = utils::load_toml(config_path)?;

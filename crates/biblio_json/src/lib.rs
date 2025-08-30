@@ -3,24 +3,31 @@ pub mod modules;
 pub mod core;
 pub mod html_text;
 use std::{collections::HashMap, fmt::Display, path::Path, sync::Arc};
+use flate2::Compression;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{modules::{Module, ModuleValidationContext, ModuleValidationError, bible::BibleModule, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}};
+use crate::{html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleValidationContext, ModuleValidationError, bible::BibleModule, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct PackageConfig
 {
     pub name: String,
+    pub description: Option<HtmlText>,
     pub authors: Vec<String>,
     pub license: String,
     pub module_paths: Option<ModulePaths>,
+    #[serde(default)]
+    pub data: ExternalModuleData,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "snake_case")]
+#[serde(deny_unknown_fields)]
 pub struct ModulePaths
 {
     pub bibles: Option<String>,
@@ -31,13 +38,7 @@ pub struct ModulePaths
     pub commentaries: Option<String>,
 }
 
-// #[derive(Debug, Clone)]
-// pub struct LoadPackageError
-// {
-//     pub file: Option<String>,
-//     pub message: String,
-// }
-
+#[derive(Debug)]
 pub enum LoadPackageError
 {
     ModuleLoadingError {
@@ -58,6 +59,7 @@ pub enum LoadPackageError
     ExpectedParent(String),
     ExpectedStem(String),
     PackagePathDoesNotExist(String),
+    LoadPackageBinaryError(String),
 }
 
 impl Display for LoadPackageError
@@ -84,6 +86,7 @@ impl Display for LoadPackageError
                     write!(f, "Path for package does not exist '{}'", path)    
                 }
             },
+            LoadPackageError::LoadPackageBinaryError(e) => write!(f, "Error when loading package binary: {}", e),
         }
     }
 }
@@ -91,14 +94,14 @@ impl Display for LoadPackageError
 #[derive(Debug)]
 pub struct Package 
 {
-    pub name: String,
-    pub authors: Vec<String>,
-    pub license: String,
+    pub config: PackageConfig,
     pub modules: HashMap<String, Module>
 }
 
 impl Package
 {
+    pub fn name(&self) -> &str { &self.config.name }
+
     pub fn load(dir_path: &str) -> Result<Self, Vec<LoadPackageError>>
     {
         let path = Path::new(dir_path);
@@ -132,10 +135,35 @@ impl Package
         Self::validate_modules(&modules)?;
 
         Ok(Self {
-            name: config.name,
-            authors: config.authors,
-            license: config.license,
+            config,
             modules: modules.into_iter().map(|m| (m.name().to_owned(), m)).collect()
+        })
+    }
+
+    pub fn to_binary(&self) -> Result<Vec<u8>, String>
+    {
+        let bin = PackageBinary {
+            config: self.config.clone(),
+            modules: self.modules.values().cloned().collect_vec(),
+        };
+
+        let uncompressed = bincode::serde::encode_to_vec(bin, bincode::config::standard())
+            .map_err(|e| e.to_string())?;
+
+        Ok(utils::compress(&uncompressed, Compression::best()))
+    }
+
+    pub fn from_binary(bin: &[u8]) -> Result<Self, Vec<LoadPackageError>>
+    {
+        let uncompressed = utils::decompress(bin);
+        let (bin, _): (PackageBinary, usize) = bincode::serde::decode_from_slice(&uncompressed, bincode::config::standard())
+            .map_err(|e| vec![LoadPackageError::LoadPackageBinaryError(e.to_string())])?;
+
+        Self::validate_modules(&bin.modules)?;
+
+        Ok(Self {
+            modules: bin.modules.into_iter().map(|m| (m.name().to_owned(), m)).collect(),
+            config: bin.config,
         })
     }
 
@@ -186,7 +214,7 @@ impl Package
         {
             let result = Self::load_module(root, &bibles_path, |dir, name| 
             {
-                Ok(Module::Bible(Arc::new(BibleModule::load(dir, name)?)))
+                Ok(Module::Bible(Arc::new(BibleModule::load_json(dir, name)?)))
             });
 
             match result
@@ -200,7 +228,7 @@ impl Package
         {
             let result =  Self::load_module(root, &dictionary_paths, |dir, name| 
             {
-                Ok(Module::Dictionary(Arc::new(DictModule::load(dir, name)?)))
+                Ok(Module::Dictionary(Arc::new(DictModule::load_json(dir, name)?)))
             });
 
             match result
@@ -214,7 +242,7 @@ impl Package
         {
             let result =  Self::load_module(root, &xref_paths, |dir, name| 
             {
-                Ok(Module::XRef(Arc::new(XRefModule::load(dir, name)?)))
+                Ok(Module::XRef(Arc::new(XRefModule::load_json(dir, name)?)))
             });
 
             match result
@@ -227,7 +255,7 @@ impl Package
         if let Some(strongs_defs) = &paths.strongs_defs
         {
             let result = Self::load_module(root, strongs_defs, |dir, name| {
-                Ok(Module::StrongsDefs(Arc::new(StrongsDefsModule::load(dir, name)?)))
+                Ok(Module::StrongsDefs(Arc::new(StrongsDefsModule::load_json(dir, name)?)))
             });
 
             match result 
@@ -240,7 +268,7 @@ impl Package
         if let Some(strongs_links) = &paths.strongs_links
         {
             let result = Self::load_module(root, strongs_links, |dir, name| {
-                Ok(Module::StrongsLinks(Arc::new(StrongsLinksModule::load(dir, name)?)))
+                Ok(Module::StrongsLinks(Arc::new(StrongsLinksModule::load_json(dir, name)?)))
             });
 
             match result 
@@ -253,7 +281,7 @@ impl Package
         if let Some(commentaries) = &paths.commentaries
         {
             let result = Self::load_module(root, commentaries, |dir, name| {
-                Ok(Module::Commentary(Arc::new(CommentaryModule::load(dir, name)?)))
+                Ok(Module::Commentary(Arc::new(CommentaryModule::load_json(dir, name)?)))
             });
 
             match result 
@@ -308,4 +336,11 @@ impl Package
             }))
         }).collect()
     }
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct PackageBinary
+{
+    pub modules: Vec<Module>,
+    pub config: PackageConfig,
 }

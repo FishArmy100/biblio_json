@@ -30,7 +30,7 @@ pub struct StrongsDefsConfig
     pub external: ExternalModuleData,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct StrongsDefsModule
 {
     pub config: StrongsDefsConfig,
@@ -40,7 +40,7 @@ pub struct StrongsDefsModule
 
 impl StrongsDefsModule
 {
-    pub fn load(dir_path: &str, name: &str) -> Result<Self, String>
+    pub fn load_json(dir_path: &str, name: &str) -> Result<Self, String>
     {
         let config_path = format!("{}/{}.toml", dir_path, name);
         let config: StrongsDefsConfig = utils::load_toml(config_path)?;
