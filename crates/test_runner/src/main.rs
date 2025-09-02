@@ -1,6 +1,6 @@
 use std::{fs, str::FromStr};
 
-use biblio_json::{Package, core::VerseId, modules::Module};
+use biblio_json::{Package, core::VerseId};
 use itertools::Itertools;
 
 fn main()
