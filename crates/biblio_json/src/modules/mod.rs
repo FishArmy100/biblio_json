@@ -17,7 +17,7 @@ use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, ast::AssetIdNam
 pub struct ExternalModuleData
 {
     #[serde(default)]
-    pub modules: HashMap<AssetIdName, String>,
+    pub aliases: HashMap<AssetIdName, String>,
     #[serde(default)]
     pub assets: HashMap<AssetIdName, String>,
 }

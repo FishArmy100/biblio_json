@@ -16,52 +16,61 @@ impl RefId
 {
     pub fn has_verse_word(&self, verse_id: &VerseId, word_id: NonZeroU32) -> bool 
     {
-        // Normalize to a comparable tuple
-        let target = (
-            verse_id.book,
-            Some(verse_id.chapter),
-            Some(verse_id.verse),
-            Some(word_id),
-        );
-
-        match self {
-            RefId::Single(atom) => {
-                let atom_tuple = (
-                    atom.book(),
-                    atom.chapter(),
-                    atom.verse(),
-                    atom.word(),
-                );
-
-                // Only compare up to the granularity of the atom
-                atom_tuple.0 == target.0
-                    && atom_tuple.1.map_or(true, |c| c == target.1.unwrap())
-                    && atom_tuple.2.map_or(true, |v| v == target.2.unwrap())
-                    && atom_tuple.3.map_or(true, |w| w == target.3.unwrap())
-            }
-            RefId::Range { from, to } => {
-                let from_tuple = (
-                    from.book(),
-                    from.chapter(),
-                    from.verse(),
-                    from.word(),
-                );
-                let to_tuple = (
-                    to.book(),
-                    to.chapter(),
-                    to.verse(),
-                    to.word(),
-                );
-
-                // Compare lexicographically (Rust derives Ord for tuples)
-                let target_tuple = (
-                    target.0,
-                    Some(verse_id.chapter),
-                    Some(verse_id.verse),
-                    Some(word_id),
-                );
-
-                from_tuple <= target_tuple && target_tuple <= to_tuple
+        match self 
+        { 
+            RefId::Single(atom) => match atom 
+            { 
+                Atom::Book { book } => verse_id.book == *book, 
+                Atom::Chapter { book, chapter } => verse_id.book == *book && verse_id.chapter == *chapter, 
+                Atom::Verse { book, chapter, verse } => verse_id.book == *book && verse_id.chapter == *chapter && verse_id.verse == *verse, 
+                Atom::Word { book, chapter, verse, word } => verse_id.book == *book && verse_id.chapter == *chapter && verse_id.verse == *verse && word_id == *word, 
+            }, 
+            RefId::Range { from, to } => 
+            { 
+                if verse_id.book < from.book() || verse_id.book > to.book() { return false; } 
+                if verse_id.book == from.book() 
+                { 
+                    if let Some(chapter) = from.chapter() 
+                    { 
+                        if verse_id.chapter < chapter { return false } 
+                        if verse_id.chapter == chapter 
+                        { 
+                            if let Some(verse) = from.verse() 
+                            { 
+                                if verse_id.verse < verse { return false } 
+                                if verse_id.verse == verse 
+                                { 
+                                    if let Some(word) = from.word() 
+                                    { 
+                                        if word_id < word { return false } 
+                                    } 
+                                } 
+                            } 
+                        } 
+                    } 
+                } 
+                
+                if verse_id.book == to.book() 
+                { 
+                    if let Some(chapter) = to.chapter() 
+                    { 
+                        if verse_id.chapter > chapter { return false } 
+                        if verse_id.chapter == chapter 
+                        { 
+                            if let Some(verse) = to.verse() 
+                            { 
+                                if verse_id.verse > verse { return false } 
+                                if verse_id.verse == verse 
+                                { 
+                                    if let Some(word) = to.word() 
+                                    { 
+                                        if word_id > word { return false } 
+                                    } 
+                                } 
+                            } 
+                        } 
+                    } 
+                } true 
             }
         }
     }
@@ -75,37 +84,47 @@ impl RefId
     /// ```
     pub fn has_verse(&self, verse_id: &VerseId) -> bool 
     {
-        // Normalize target verse into tuple (book, chapter, verse)
-        let target = (verse_id.book, verse_id.chapter, verse_id.verse);
-
-        match self {
-            RefId::Single(atom) => {
-                let atom_tuple = (
-                    atom.book(),
-                    atom.chapter().unwrap_or(verse_id.chapter), // fallback so cmp works
-                    atom.verse().unwrap_or(verse_id.verse),
-                );
-
-                // Compare only up to the granularity of the atom
-                atom_tuple.0 == target.0
-                    && atom.chapter().map_or(true, |c| c == target.1)
-                    && atom.verse().map_or(true, |v| v == target.2)
-            }
-            RefId::Range { from, to } => {
-                let from_tuple = (
-                    from.book(),
-                    from.chapter().unwrap_or(NonZeroU32::MIN), // lowest possible
-                    from.verse().unwrap_or(NonZeroU32::MIN),
-                );
-                let to_tuple = (
-                    to.book(),
-                    to.chapter().unwrap_or(NonZeroU32::MAX), // highest possible
-                    to.verse().unwrap_or(NonZeroU32::MAX),
-                );
-
-                let target_tuple = target;
-
-                from_tuple <= target_tuple && target_tuple <= to_tuple
+        match self 
+        { 
+            RefId::Single(atom) => match atom 
+            { 
+                Atom::Book { book } => verse_id.book == *book, 
+                Atom::Chapter { book, chapter } => verse_id.book == *book && verse_id.chapter == *chapter, 
+                Atom::Verse { book, chapter, verse } => verse_id.book == *book && verse_id.chapter == *chapter && verse_id.verse == *verse, 
+                Atom::Word { book, chapter, verse, .. } => verse_id.book == *book && verse_id.chapter == *chapter && verse_id.verse == *verse, 
+            }, 
+            RefId::Range { from, to } => 
+            { 
+                if verse_id.book < from.book() || verse_id.book > to.book() { return false; } 
+                if verse_id.book == from.book() 
+                { 
+                    if let Some(chapter) = from.chapter() 
+                    { 
+                        if verse_id.chapter < chapter { return false } 
+                        if verse_id.chapter == chapter 
+                        { 
+                            if let Some(verse) = from.verse() 
+                            { 
+                                if verse_id.verse < verse { return false }
+                            } 
+                        } 
+                    } 
+                } 
+                
+                if verse_id.book == to.book() 
+                { 
+                    if let Some(chapter) = to.chapter() 
+                    { 
+                        if verse_id.chapter > chapter { return false } 
+                        if verse_id.chapter == chapter 
+                        { 
+                            if let Some(verse) = to.verse() 
+                            { 
+                                if verse_id.verse > verse { return false }
+                            } 
+                        } 
+                    } 
+                } true 
             }
         }
     }

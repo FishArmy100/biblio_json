@@ -2,7 +2,7 @@ pub(crate) mod utils;
 pub mod modules;
 pub mod core;
 pub mod html_text;
-use std::{collections::HashMap, fmt::Display, path::Path, sync::Arc};
+use std::{collections::HashMap, fmt::Display, num::NonZeroU32, path::Path, sync::Arc};
 use flate2::Compression;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -99,7 +99,7 @@ pub struct FetchEntry
 }
 
 #[derive(Debug, Clone)]
-pub struct VerseFetchData
+pub struct VerseFetchResponse
 {
     pub verse: Verse,
     pub entries: Vec<FetchEntry>,
@@ -154,7 +154,7 @@ impl Package
         })
     }
 
-    pub fn fetch(&self, verse_id: VerseId, bible: &str) -> Option<VerseFetchData>
+    pub fn fetch(&self, verse_id: VerseId, bible: &str) -> Option<VerseFetchResponse>
     {
         let bible = self.modules.get(bible).and_then(|v| v.as_bible())?;
         let verse = bible.source.verses.get(&verse_id)?;
@@ -181,57 +181,150 @@ impl Package
         let xref_entries = self.modules.values()
             .filter_map(Module::as_xrefs)
             .filter(|xrefs| xrefs.config.bible.as_ref().is_none_or(|b| *b == bible.config.name))
-            .map(|xrefs| {
+            .flat_map(|xrefs| {
                 let entries = xrefs.entries.iter().filter(|r| r.has_verse(&verse_id)).collect_vec();
-
-                verse.words.iter().enumerate().filter_map(|(i, _)| {
-                    let word_index = (i as u32 + 1).try_into().unwrap();
-                    if let Some(entry) = entries.iter().find(|e| e.has_verse_word(&verse_id, word_index)) 
+                let mut result = Vec::new();
+                for entry in entries 
+                {
+                    // Find all word indices covered by this entry
+                    let mut covered = Vec::new();
+                    for (i, _) in verse.words.iter().enumerate() 
                     {
-                        Some(FetchEntry {
-                            range: WordRange::Single((i as u32 + 1).try_into().unwrap()), // convert from 0 to 1 based indexing
+                        let word_index = (i as u32 + 1).try_into().unwrap();
+                        if entry.has_verse_word(&verse_id, word_index) 
+                        {
+                            covered.push(word_index);
+                        }
+                    }
+
+                    // Group into contiguous ranges
+                    if !covered.is_empty() 
+                    {
+                        let mut start = covered[0];
+                        let mut end = covered[0];
+                        for w in covered.iter().skip(1) 
+                        {
+                            if w.get() == end.get() + 1 
+                            {
+                                end = *w;
+                            } 
+                            else 
+                            {
+                                // Push previous range
+                                let range = if start == end {
+                                    WordRange::Single(start)
+                                } 
+                                else 
+                                {
+                                    WordRange::Range(start, end)
+                                };
+
+                                result.push(FetchEntry {
+                                    range,
+                                    entry: ModuleEntryRef {
+                                        module: xrefs.config.name.clone(),
+                                        entry_id: entry.id(),
+                                    },
+                                });
+                                start = *w;
+                                end = *w;
+                            }
+                        }
+                        // Push last range
+                        let range = if start == end 
+                        {
+                            WordRange::Single(start)
+                        } 
+                        else 
+                        {
+                            WordRange::Range(start, end)
+                        };
+
+                        result.push(FetchEntry {
+                            range,
                             entry: ModuleEntryRef {
                                 module: xrefs.config.name.clone(),
-                                entry_id: entry.id()
-                            }
-                        })
+                                entry_id: entry.id(),
+                            },
+                        });
                     }
-                    else 
-                    {
-                        None    
-                    }
-                }).collect_vec()
-            }).flatten().collect_vec();
+                }
+                result
+            })
+            .collect_vec();
 
         let commentary_entries = self.modules.values()
             .filter_map(Module::as_commentary)
             .filter(|commentary| commentary.config.bible.as_ref().is_none_or(|b| *b == bible.config.name))
-            .map(|commentary| {
+            .flat_map(|commentary| {
                 let entries = commentary.entries.iter().filter(|r| r.has_verse(&verse_id)).collect_vec();
-
-                verse.words.iter().enumerate().filter_map(|(i, _)| {
-                    let word_index = (i as u32 + 1).try_into().unwrap();
-                    if let Some(entry) = entries.iter().find(|e| e.has_verse_word(&verse_id, word_index)) 
+                let mut result = Vec::new();
+                for entry in entries 
+                {
+                    let mut covered = Vec::new();
+                    for (i, _) in verse.words.iter().enumerate() 
                     {
-                        Some(FetchEntry {
-                            range: WordRange::Single((i as u32 + 1).try_into().unwrap()), // convert from 0 to 1 based indexing
+                        let word_index = (i as u32 + 1).try_into().unwrap();
+                        if entry.has_verse_word(&verse_id, word_index) {
+                            covered.push(word_index);
+                        }
+                    }
+                    if !covered.is_empty() 
+                    {
+                        let mut start = covered[0];
+                        let mut end = covered[0];
+                        for w in covered.iter().skip(1) 
+                        {
+                            if w.get() == end.get() + 1 
+                            {
+                                end = *w;
+                            } 
+                            else 
+                            {
+                                let range = if start == end 
+                                {
+                                    WordRange::Single(start)
+                                } 
+                                else 
+                                {
+                                    WordRange::Range(start, end)
+                                };
+                                result.push(FetchEntry {
+                                    range,
+                                    entry: ModuleEntryRef {
+                                        module: commentary.config.name.clone(),
+                                        entry_id: entry.id,
+                                    },
+                                });
+                                start = *w;
+                                end = *w;
+                            }
+                        }
+                        let range = if start == end {
+                            WordRange::Single(start)
+                        } else {
+                            WordRange::Range(start, end)
+                        };
+                        result.push(FetchEntry {
+                            range,
                             entry: ModuleEntryRef {
                                 module: commentary.config.name.clone(),
-                                entry_id: entry.id
-                            }
-                        })
+                                entry_id: entry.id,
+                            },
+                        });
                     }
-                    else 
-                    {
-                        None    
-                    }
-                }).collect_vec()
-            }).flatten().collect_vec();
+                }
+                result
+            })
+            .collect_vec();
 
         let strongs = self.modules.values()
             .filter_map(Module::as_strongs_links)
             .find(|links| links.config.bible == bible.config.name)
-            .map(|links| links.get_links(&verse_id))
+            .map(|links| links.get_links(&verse_id).map(|l| ModuleEntryRef { 
+                module: links.config.name.clone(),
+                entry_id: l.id,
+            }))
             .flatten();
             
         let mut entries = dict_entries.into_iter()
@@ -241,11 +334,13 @@ impl Package
 
         if let Some(strongs) = strongs
         {
-            let strongs_defs = 
-            strongs.words.iter().map(f)
+            entries.push(FetchEntry { 
+                range: WordRange::Range(NonZeroU32::MIN, (verse.words.len() as u32).try_into().unwrap()), 
+                entry: strongs
+            });
         }
 
-        Some(VerseFetchData { 
+        Some(VerseFetchResponse { 
             verse: verse.clone(), 
             entries
         })
