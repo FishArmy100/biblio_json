@@ -1,6 +1,8 @@
+use std::num::NonZeroU32;
+
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
+use crate::{core::{RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -95,7 +97,7 @@ impl CommentaryModule
 #[serde(deny_unknown_fields)]
 pub struct CommentaryEntry
 {
-    pub id: u32,
+    pub id: EntryId,
     pub references: Vec<RefId>,
     pub comment: HtmlText,
 }
@@ -110,5 +112,15 @@ impl CommentaryEntry
             .collect();
 
         Ok(ret)
+    }
+
+    pub fn has_verse(&self, verse: &VerseId) -> bool
+    {
+        self.references.iter().any(|r| r.has_verse(verse))
+    }
+
+    pub fn has_verse_word(&self, verse: &VerseId, word: NonZeroU32) -> bool
+    {
+        self.references.iter().any(|r| r.has_verse_word(verse, word))
     }
 }

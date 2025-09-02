@@ -7,7 +7,7 @@ use flate2::Compression;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleValidationContext, ModuleValidationError, bible::BibleModule, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}};
+use crate::{core::{StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationContext, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::XRefModule}};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -91,6 +91,20 @@ impl Display for LoadPackageError
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct FetchEntry
+{
+    pub range: WordRange,
+    pub entry: ModuleEntryRef,
+}
+
+#[derive(Debug, Clone)]
+pub struct VerseFetchData
+{
+    pub verse: Verse,
+    pub entries: Vec<FetchEntry>,
+}
+
 #[derive(Debug)]
 pub struct Package 
 {
@@ -138,6 +152,130 @@ impl Package
             config,
             modules: modules.into_iter().map(|m| (m.name().to_owned(), m)).collect()
         })
+    }
+
+    pub fn fetch(&self, verse_id: VerseId, bible: &str) -> Option<VerseFetchData>
+    {
+        let bible = self.modules.get(bible).and_then(|v| v.as_bible())?;
+        let verse = bible.source.verses.get(&verse_id)?;
+
+        let dict_entries = self.modules.values().filter_map(Module::as_dict).map(|dict| {
+            verse.words.iter().enumerate().filter_map(move |(i, w)| {
+                if let Some(entry) = dict.find(&w.text)
+                {
+                    Some(FetchEntry {
+                        range: WordRange::Single((i as u32 + 1).try_into().unwrap()), // convert from 0 to 1 based indexing
+                        entry: ModuleEntryRef {
+                            module: dict.config.name.clone(),
+                            entry_id: entry.id
+                        }
+                    })
+                }
+                else 
+                {
+                    None    
+                }
+            })
+        }).flatten().collect_vec();
+
+        let xref_entries = self.modules.values()
+            .filter_map(Module::as_xrefs)
+            .filter(|xrefs| xrefs.config.bible.as_ref().is_none_or(|b| *b == bible.config.name))
+            .map(|xrefs| {
+                let entries = xrefs.entries.iter().filter(|r| r.has_verse(&verse_id)).collect_vec();
+
+                verse.words.iter().enumerate().filter_map(|(i, _)| {
+                    let word_index = (i as u32 + 1).try_into().unwrap();
+                    if let Some(entry) = entries.iter().find(|e| e.has_verse_word(&verse_id, word_index)) 
+                    {
+                        Some(FetchEntry {
+                            range: WordRange::Single((i as u32 + 1).try_into().unwrap()), // convert from 0 to 1 based indexing
+                            entry: ModuleEntryRef {
+                                module: xrefs.config.name.clone(),
+                                entry_id: entry.id()
+                            }
+                        })
+                    }
+                    else 
+                    {
+                        None    
+                    }
+                }).collect_vec()
+            }).flatten().collect_vec();
+
+        let commentary_entries = self.modules.values()
+            .filter_map(Module::as_commentary)
+            .filter(|commentary| commentary.config.bible.as_ref().is_none_or(|b| *b == bible.config.name))
+            .map(|commentary| {
+                let entries = commentary.entries.iter().filter(|r| r.has_verse(&verse_id)).collect_vec();
+
+                verse.words.iter().enumerate().filter_map(|(i, _)| {
+                    let word_index = (i as u32 + 1).try_into().unwrap();
+                    if let Some(entry) = entries.iter().find(|e| e.has_verse_word(&verse_id, word_index)) 
+                    {
+                        Some(FetchEntry {
+                            range: WordRange::Single((i as u32 + 1).try_into().unwrap()), // convert from 0 to 1 based indexing
+                            entry: ModuleEntryRef {
+                                module: commentary.config.name.clone(),
+                                entry_id: entry.id
+                            }
+                        })
+                    }
+                    else 
+                    {
+                        None    
+                    }
+                }).collect_vec()
+            }).flatten().collect_vec();
+
+        let strongs = self.modules.values()
+            .filter_map(Module::as_strongs_links)
+            .find(|links| links.config.bible == bible.config.name)
+            .map(|links| links.get_links(&verse_id))
+            .flatten();
+            
+        let mut entries = dict_entries.into_iter()
+            .chain(xref_entries.into_iter())
+            .chain(commentary_entries.into_iter())
+            .collect_vec();
+
+        if let Some(strongs) = strongs
+        {
+            let strongs_defs = 
+            strongs.words.iter().map(f)
+        }
+
+        Some(VerseFetchData { 
+            verse: verse.clone(), 
+            entries
+        })
+    }
+
+    pub fn fetch_strongs(&self, strongs: &StrongsNumber) -> Vec<&StrongsDefEntry>
+    {
+        self.modules.values()
+            .filter_map(|m| match m {
+                Module::StrongsDefs(d) => Some(d.as_ref()),
+                _ => None
+            })
+            .filter_map(|defs| defs.get_def(strongs))
+            .collect()
+    }
+
+    pub fn fetch_entry<'a>(&'a self, entry_ref: ModuleEntryRef) -> Option<ModuleEntry<'a>>
+    {
+        let module = self.get_mod(&entry_ref.module)?;
+        let module_entry = match module 
+        {
+            Module::Bible(bible) => ModuleEntry::Verse(bible.source.verses.values().find(|v| v.id == entry_ref.entry_id)?),
+            Module::Dictionary(dict) => ModuleEntry::Dictionary(dict.entries.iter().find(|e| e.id == entry_ref.entry_id)?),
+            Module::XRef(xref) => ModuleEntry::XRef(xref.entries.iter().find(|e| e.id() == entry_ref.entry_id)?),
+            Module::StrongsDefs(strongs_defs) => ModuleEntry::StrongsDef(strongs_defs.entries.iter().find(|e| e.id == entry_ref.entry_id)?),
+            Module::StrongsLinks(strongs_links) => ModuleEntry::StrongsLink(strongs_links.entries.iter().find(|e| e.id == entry_ref.entry_id)?),
+            Module::Commentary(commentary) => ModuleEntry::Commentary(commentary.entries.iter().find(|e| e.id == entry_ref.entry_id)?),
+        };
+
+        Some(module_entry)
     }
 
     pub fn to_binary(&self) -> Result<Vec<u8>, String>

@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{lang::Language, strongs_number::StrongsNumber}, html_text::HtmlText, modules::ExternalModuleData, utils};
+use crate::{core::{lang::Language, strongs_number::StrongsNumber}, html_text::HtmlText, modules::{EntryId, ExternalModuleData}, utils};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -12,7 +12,7 @@ pub struct StrongsDefEntry
     pub word: String,
     pub definitions: Vec<HtmlText>,
     pub derivation: Option<HtmlText>,
-    pub id: u32,
+    pub id: EntryId,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -35,7 +35,7 @@ pub struct StrongsDefsModule
 {
     pub config: StrongsDefsConfig,
     pub index_map: HashMap<StrongsNumber, u32>,
-    pub defs: Vec<StrongsDefEntry>,
+    pub entries: Vec<StrongsDefEntry>,
 }
 
 impl StrongsDefsModule
@@ -55,7 +55,7 @@ impl StrongsDefsModule
         Ok(Self { 
             config,
             index_map,
-            defs,
+            entries: defs,
         })
     }
 
@@ -63,7 +63,7 @@ impl StrongsDefsModule
     {
         match self.index_map.get(num)
         {
-            Some(idx) => Some(&self.defs[*idx as usize]),
+            Some(idx) => Some(&self.entries[*idx as usize]),
             None => None
         }
     }

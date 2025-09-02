@@ -1,7 +1,11 @@
+use std::num::NonZeroU32;
+
 use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
 
+use crate::core::VerseId;
+use crate::modules::EntryId;
 use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -22,7 +26,7 @@ pub struct XRefsConfig
 }
 
 #[derive(Debug, Clone)]
-pub enum XRef 
+pub enum XRefEntry 
 {
     Directed 
     {
@@ -39,7 +43,7 @@ pub enum XRef
     },
 }
 
-impl XRef
+impl XRefEntry
 {
     pub fn from_file(path: &str) -> Result<Vec<Self>, String>
     {
@@ -51,38 +55,47 @@ impl XRef
         Ok(ret)
     }
 
-    pub fn has_source(&self, ref_id: &RefId) -> bool
+    pub fn has_verse(&self, verse: &VerseId) -> bool
     {
         match self 
         {
-            Self::Directed { source, targets: _, note: _, id: _ } => source == ref_id,
-            Self::Mutual { refs, note: _, id: _ } => refs.iter().find(|r| **r == *ref_id).is_some()
+            XRefEntry::Directed { source, targets, .. } => source.has_verse(verse) || targets.iter().any(|t| t.has_verse(verse)),
+            XRefEntry::Mutual { refs, .. } => refs.iter().any(|r| r.has_verse(verse)),
         }
     }
 
-    pub fn id(&self) -> u32 
+    pub fn has_verse_word(&self, verse: &VerseId, word: NonZeroU32) -> bool
     {
         match self 
         {
-            XRef::Directed { source: _, targets: _, note: _, id } => *id,
-            XRef::Mutual { refs: _, note: _, id } => *id,
+            XRefEntry::Directed { source, targets, .. } => source.has_verse_word(verse, word) || targets.iter().any(|t| t.has_verse_word(verse, word)),
+            XRefEntry::Mutual { refs, .. } => refs.iter().any(|r| r.has_verse_word(verse, word)),
+        }
+    }
+
+    pub fn id(&self) -> EntryId 
+    {
+        match self 
+        {
+            XRefEntry::Directed { source: _, targets: _, note: _, id } => *id,
+            XRefEntry::Mutual { refs: _, note: _, id } => *id,
         }
     }
 
     pub fn collect_ref_ids(&self) -> Vec<RefId>
     {
         match self {
-            XRef::Directed { source, targets, note: _, id: _ } => {
+            XRefEntry::Directed { source, targets, note: _, id: _ } => {
                 let mut ids = targets.iter().map(|t| t.clone()).collect_vec();
                 ids.push(source.clone());
                 ids
             },
-            XRef::Mutual { refs, note: _, id: _ } => refs.iter().map(|r| r.clone()).collect_vec(),
+            XRefEntry::Mutual { refs, note: _, id: _ } => refs.iter().map(|r| r.clone()).collect_vec(),
         }
     }
 }
 
-impl Serialize for XRef {
+impl Serialize for XRefEntry {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where S: Serializer {
         // Use human-readable (JSON) for tagged, otherwise compact for bincode
@@ -97,22 +110,22 @@ impl Serialize for XRef {
                     source: &'a RefId,
                     targets: &'a Vec<RefId>,
                     note: &'a Option<String>,
-                    id: u32,
+                    id: EntryId,
                 },
                 Mutual 
                 {
                     refs: &'a Vec<RefId>,
                     note: &'a Option<String>,
-                    id: u32,
+                    id: EntryId,
                 },
             }
             match self 
             {
-                XRef::Directed { source, targets, note, id } => 
+                XRefEntry::Directed { source, targets, note, id } => 
                 {
                     Helper::Directed { source, targets, note, id: *id }.serialize(serializer)
                 }
-                XRef::Mutual { refs, note, id } => 
+                XRefEntry::Mutual { refs, note, id } => 
                 {
                     Helper::Mutual { refs, note, id: *id }.serialize(serializer)
                 }
@@ -123,11 +136,11 @@ impl Serialize for XRef {
             // Compact binary for bincode
             match self 
             {
-                XRef::Directed { source, targets, note, id } => 
+                XRefEntry::Directed { source, targets, note, id } => 
                 {
                     (0u8, source, targets, note, id).serialize(serializer)
                 }
-                XRef::Mutual { refs, note, id } => 
+                XRefEntry::Mutual { refs, note, id } => 
                 {
                     (1u8, refs, note, id).serialize(serializer)
                 }
@@ -136,7 +149,7 @@ impl Serialize for XRef {
     }
 }
 
-impl<'de> Deserialize<'de> for XRef 
+impl<'de> Deserialize<'de> for XRefEntry 
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where D: Deserializer<'de> 
@@ -163,8 +176,8 @@ impl<'de> Deserialize<'de> for XRef
             }
             match Helper::deserialize(deserializer)? 
             {
-                Helper::Directed { source, targets, note, id } => Ok(XRef::Directed { source, targets, note, id }),
-                Helper::Mutual { refs, note, id } => Ok(XRef::Mutual { refs, note, id }),
+                Helper::Directed { source, targets, note, id } => Ok(XRefEntry::Directed { source, targets, note, id }),
+                Helper::Mutual { refs, note, id } => Ok(XRefEntry::Mutual { refs, note, id }),
             }
         } 
         else 
@@ -177,7 +190,7 @@ impl<'de> Deserialize<'de> for XRef
 
             impl<'de> Visitor<'de> for XRefVisitor 
             {
-                type Value = XRef;
+                type Value = XRefEntry;
 
                 fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result 
                 {
@@ -196,14 +209,14 @@ impl<'de> Deserialize<'de> for XRef
                             let targets: Vec<RefId> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing targets"))?;
                             let note: Option<String> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing note"))?;
                             let id: u32 = seq.next_element()?.ok_or_else(|| A::Error::custom("missing id"))?;
-                            Ok(XRef::Directed { source, targets, note, id })
+                            Ok(XRefEntry::Directed { source, targets, note, id })
                         }
                         1 => 
                         {
                             let refs: Vec<RefId> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing refs"))?;
                             let note: Option<String> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing note"))?;
                             let id: u32 = seq.next_element()?.ok_or_else(|| A::Error::custom("missing id"))?;
-                            Ok(XRef::Mutual { refs, note, id })
+                            Ok(XRefEntry::Mutual { refs, note, id })
                         }
                         _ => Err(A::Error::custom("invalid tag for XRef")),
                     }
@@ -219,7 +232,7 @@ impl<'de> Deserialize<'de> for XRef
 pub struct XRefModule
 {
     pub config: XRefsConfig,
-    pub refs: Vec<XRef>,
+    pub entries: Vec<XRefEntry>,
 }
 
 impl XRefModule
@@ -230,11 +243,11 @@ impl XRefModule
         let config: XRefsConfig = utils::load_toml(config_path)?;
 
         let dictionary_path = format!("{}/{}.jsonl", dir_path, name);
-        let refs = XRef::from_file(&dictionary_path)?;
+        let refs = XRefEntry::from_file(&dictionary_path)?;
 
         Ok(Self { 
             config,
-            refs,
+            entries: refs,
         })
     }
 
@@ -248,7 +261,7 @@ impl XRefModule
             };
 
             let mut errors = vec![];
-            for r in self.refs.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
+            for r in self.entries.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
             {
                 if !bible.source.id_exists(&r)
                 {
@@ -268,7 +281,7 @@ impl XRefModule
         else  
         {
             let mut errors = vec![];
-            for r in self.refs.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
+            for r in self.entries.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
             {
                 if r.is_word()
                 {

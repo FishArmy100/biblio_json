@@ -10,7 +10,7 @@ use bible::BibleModule;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, ast::AssetIdName}, modules::{commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}};
+use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -261,4 +261,24 @@ impl Module
             Module::Commentary(commentary_module) => commentary_module.validate(context),
         }
     }
+}
+
+pub type EntryId = u32;
+
+#[derive(Debug, Clone, Copy)]
+pub enum ModuleEntry<'a>
+{
+    Dictionary(&'a DictEntry),
+    StrongsDef(&'a StrongsDefEntry),
+    StrongsLink(&'a StrongsLinkEntry),
+    XRef(&'a XRefEntry),
+    Commentary(&'a CommentaryEntry),
+    Verse(&'a Verse),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ModuleEntryRef
+{
+    pub module: String,
+    pub entry_id: EntryId,
 }

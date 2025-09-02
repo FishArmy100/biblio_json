@@ -2,7 +2,7 @@ use std::{collections::{HashMap, HashSet}, num::NonZeroU32};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{Atom, OsisBook, RefId, VerseId, lang::Language}, html_text::HtmlText, modules::ExternalModuleData, utils};
+use crate::{core::{Atom, OsisBook, RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -66,7 +66,7 @@ impl BibleSource
 
         for (verse, line) in verses.iter()
         {
-            let VerseId { book, chapter, verse: verse_idx } = &verse.id;
+            let VerseId { book, chapter, verse: verse_idx } = &verse.verse_id;
 
             if Some(book) != current_book
             {
@@ -100,7 +100,7 @@ impl BibleSource
             }
             else if chapter.get() != book_chapters.len() as u32 
             {
-                return Err(format!("Verse {} in file {} on line {}, has a chapter number that is out of order.", verse.id, path, line))
+                return Err(format!("Verse {} in file {} on line {}, has a chapter number that is out of order.", verse.verse_id, path, line))
             }
 
             if verse_idx.get() == *book_chapters.last().unwrap() + 1
@@ -109,7 +109,7 @@ impl BibleSource
             }
             else 
             {
-                return Err(format!("Verse {} in file {} on line {}, has a verse number that is out of order.", verse.id, path, line))
+                return Err(format!("Verse {} in file {} on line {}, has a verse number that is out of order.", verse.verse_id, path, line))
             }
         }
 
@@ -129,7 +129,7 @@ impl BibleSource
         }
 
         let verses = verses.into_iter()
-            .map(|(v, _)| (v.id.clone(), v))
+            .map(|(v, _)| (v.verse_id.clone(), v))
             .collect::<HashMap<_, _>>();
 
         Ok(Self 
@@ -154,7 +154,7 @@ impl BibleSource
         let chapter = atom.chapter().unwrap_or(NonZeroU32::new(1).unwrap());
         let verse = atom.verse().unwrap_or(NonZeroU32::new(1).unwrap());
 
-        let complete_verse = VerseId { book: *book, chapter, verse };
+        let complete_verse = VerseId { book, chapter, verse };
 
         let word = atom.word();
 
@@ -176,7 +176,8 @@ impl BibleSource
 #[serde(deny_unknown_fields)]
 pub struct Verse
 {
-    pub id: VerseId,
+    pub id: EntryId,
+    pub verse_id: VerseId,
     pub words: Vec<Word>
 }
 
