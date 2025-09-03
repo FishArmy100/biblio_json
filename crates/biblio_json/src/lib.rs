@@ -39,7 +39,7 @@ pub struct ModulePaths
 }
 
 #[derive(Debug)]
-pub enum LoadPackageError
+pub enum PackageLoadError
 {
     ModuleLoadingError {
         path: String,
@@ -62,21 +62,21 @@ pub enum LoadPackageError
     LoadPackageBinaryError(String),
 }
 
-impl Display for LoadPackageError
+impl Display for PackageLoadError
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
     {
         match self 
         {
-            LoadPackageError::ModuleLoadingError { path, error } => write!(f, "Error loading module '{}':\n{}", path, error),
-            LoadPackageError::ModuleValidationError { name: path, error } => write!(f, "Validation error in module '{}': {}", path, error),
-            LoadPackageError::PackagePathNotDirectory(path) => write!(f, "Package path '{}' is not a directory.", path),
-            LoadPackageError::PackageConfigNotFound(path) => write!(f, "Package config not found at path '{}'", path),
-            LoadPackageError::PackageConfigError { path, error } => write!(f, "Error loading package config '{}':\n{}", path, error),
-            LoadPackageError::GlobError(error) => write!(f, "Glob error: {}", error),
-            LoadPackageError::ExpectedParent(path) => write!(f, "Expected file {} to have a parent", path),
-            LoadPackageError::ExpectedStem(path) => write!(f, "Expected file {} to have a stem", path),
-            LoadPackageError::PackagePathDoesNotExist(path) => {
+            PackageLoadError::ModuleLoadingError { path, error } => write!(f, "Error loading module '{}':\n{}", path, error),
+            PackageLoadError::ModuleValidationError { name: path, error } => write!(f, "Validation error in module '{}': {}", path, error),
+            PackageLoadError::PackagePathNotDirectory(path) => write!(f, "Package path '{}' is not a directory.", path),
+            PackageLoadError::PackageConfigNotFound(path) => write!(f, "Package config not found at path '{}'", path),
+            PackageLoadError::PackageConfigError { path, error } => write!(f, "Error loading package config '{}':\n{}", path, error),
+            PackageLoadError::GlobError(error) => write!(f, "Glob error: {}", error),
+            PackageLoadError::ExpectedParent(path) => write!(f, "Expected file {} to have a parent", path),
+            PackageLoadError::ExpectedStem(path) => write!(f, "Expected file {} to have a stem", path),
+            PackageLoadError::PackagePathDoesNotExist(path) => {
                 if let Some(cwd) = std::env::current_dir().map(|p| p.display().to_string()).ok()
                 {
                     write!(f, "Path for package does not exist '{}' in current directory '{}'", path, cwd) 
@@ -86,7 +86,7 @@ impl Display for LoadPackageError
                     write!(f, "Path for package does not exist '{}'", path)    
                 }
             },
-            LoadPackageError::LoadPackageBinaryError(e) => write!(f, "Error when loading package binary: {}", e),
+            PackageLoadError::LoadPackageBinaryError(e) => write!(f, "Error when loading package binary: {}", e),
         }
     }
 }
@@ -116,26 +116,26 @@ impl Package
 {
     pub fn name(&self) -> &str { &self.config.name }
 
-    pub fn load(dir_path: &str) -> Result<Self, Vec<LoadPackageError>>
+    pub fn load(dir_path: &str) -> Result<Self, Vec<PackageLoadError>>
     {
         let path = Path::new(dir_path);
 
         if !path.exists()
         {
-            return Err(vec![LoadPackageError::PackagePathDoesNotExist(path.display().to_string())]);
+            return Err(vec![PackageLoadError::PackagePathDoesNotExist(path.display().to_string())]);
         }
 
         if !path.is_dir()
         {
-            return Err(vec![LoadPackageError::PackagePathNotDirectory(path.display().to_string())]);
+            return Err(vec![PackageLoadError::PackagePathNotDirectory(path.display().to_string())]);
         }
 
         let config_path = path.join(Path::new(PACKAGE_FILE_NAME));
-        let file = utils::load_file(&config_path).map_err(|e| vec![LoadPackageError::PackageConfigNotFound(e)])?;
+        let file = utils::load_file(&config_path).map_err(|e| vec![PackageLoadError::PackageConfigNotFound(e)])?;
         
         let config = match toml::from_str::<PackageConfig>(&file) {
             Ok(ok) => ok,
-            Err(e) => return Err(vec![LoadPackageError::PackageConfigError {
+            Err(e) => return Err(vec![PackageLoadError::PackageConfigError {
                 path: config_path.to_str().unwrap().to_owned(),
                 error: e.to_string(),
             }])
@@ -386,11 +386,17 @@ impl Package
         Ok(utils::compress(&uncompressed, Compression::best()))
     }
 
-    pub fn from_binary(bin: &[u8]) -> Result<Self, Vec<LoadPackageError>>
+    pub fn load_binary<P>(path: &str) -> Result<Self, Vec<PackageLoadError>>
+    {
+        let bin = utils::load_file_bin(path).map_err(|e| vec![PackageLoadError::LoadPackageBinaryError(e)])?;
+        Self::from_binary(&bin)
+    }
+
+    pub fn from_binary(bin: &[u8]) -> Result<Self, Vec<PackageLoadError>>
     {
         let uncompressed = utils::decompress(bin);
         let (bin, _): (PackageBinary, usize) = bincode::serde::decode_from_slice(&uncompressed, bincode::config::standard())
-            .map_err(|e| vec![LoadPackageError::LoadPackageBinaryError(e.to_string())])?;
+            .map_err(|e| vec![PackageLoadError::LoadPackageBinaryError(e.to_string())])?;
 
         Self::validate_modules(&bin.modules)?;
 
@@ -405,7 +411,7 @@ impl Package
         self.modules.get(name)
     }
 
-    fn validate_modules(modules: &Vec<Module>) -> Result<(), Vec<LoadPackageError>>
+    fn validate_modules(modules: &Vec<Module>) -> Result<(), Vec<PackageLoadError>>
     {
         let bibles = modules.iter().filter_map(|m| match m {
             Module::Bible(b) => Some(b.clone()),
@@ -421,7 +427,7 @@ impl Package
         {
             if let Err(errs) = m.validate(&context)
             {
-                errors.extend(errs.into_iter().map(|error| LoadPackageError::ModuleValidationError { 
+                errors.extend(errs.into_iter().map(|error| PackageLoadError::ModuleValidationError { 
                     name: m.name().to_string(), 
                     error,
                 }));
@@ -438,7 +444,7 @@ impl Package
         }
     }
 
-    fn load_modules(root: &str, paths: &ModulePaths) -> Result<Vec<Module>, Vec<LoadPackageError>>
+    fn load_modules(root: &str, paths: &ModulePaths) -> Result<Vec<Module>, Vec<PackageLoadError>>
     {
         let mut modules = vec![];
         let mut errors = vec![];
@@ -534,15 +540,15 @@ impl Package
         }
     }
 
-    fn load_module(base_dir: &str, pattern: &str, f: impl Fn(&str, &str) -> Result<Module, String>) -> Result<Vec<Module>, LoadPackageError>
+    fn load_module(base_dir: &str, pattern: &str, f: impl Fn(&str, &str) -> Result<Module, String>) -> Result<Vec<Module>, PackageLoadError>
     {
         let full_path = format!("{}/{}", base_dir, pattern);
 
-        let paths = glob::glob(&full_path).map_err(|e| LoadPackageError::GlobError(e.to_string()))?;
-        paths.filter_map(|entry| -> Option<Result<Module, LoadPackageError>> {
+        let paths = glob::glob(&full_path).map_err(|e| PackageLoadError::GlobError(e.to_string()))?;
+        paths.filter_map(|entry| -> Option<Result<Module, PackageLoadError>> {
             let entry = match entry {
                 Ok(ok) => ok,
-                Err(e) => return Some(Err(LoadPackageError::GlobError(e.to_string()))),
+                Err(e) => return Some(Err(PackageLoadError::GlobError(e.to_string()))),
             };
 
             let path = Path::new(&entry);
@@ -555,15 +561,15 @@ impl Package
             
             let dir = match path.parent() {
                 Some(s) => s,
-                None => return Some(Err(LoadPackageError::ExpectedParent(path.display().to_string())))
+                None => return Some(Err(PackageLoadError::ExpectedParent(path.display().to_string())))
             }.to_str().unwrap();
 
             let name = match path.file_stem() {
                 Some(s) => s,
-                None => return Some(Err(LoadPackageError::ExpectedStem(path.display().to_string())))
+                None => return Some(Err(PackageLoadError::ExpectedStem(path.display().to_string())))
             }.to_str().unwrap();
 
-            Some(f(dir, name).map_err(|e| LoadPackageError::ModuleLoadingError { 
+            Some(f(dir, name).map_err(|e| PackageLoadError::ModuleLoadingError { 
                 path: path.canonicalize().ok().map(|p| p.display().to_string()).unwrap(), 
                 error: e
             }))

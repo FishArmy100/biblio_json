@@ -97,9 +97,11 @@ impl XRefEntry
 
 impl Serialize for XRefEntry {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where S: Serializer {
+        where S: Serializer 
+    {
         // Use human-readable (JSON) for tagged, otherwise compact for bincode
-        if serializer.is_human_readable() {
+        if serializer.is_human_readable() 
+        {
             // Use the default derived implementation for JSON
             #[derive(Serialize)]
             #[serde(tag = "type", rename_all = "snake_case")]

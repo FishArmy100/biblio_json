@@ -81,3 +81,74 @@ impl<'de> Deserialize<'de> for WordRange
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_word_range_single_display() 
+    {
+        let range = WordRange::Single(NonZeroU32::new(5).unwrap());
+        assert_eq!(range.to_string(), "5");
+    }
+
+    #[test]
+    fn test_word_range_range_display() 
+    {
+        let range = WordRange::Range(NonZeroU32::new(2).unwrap(), NonZeroU32::new(7).unwrap());
+        assert_eq!(range.to_string(), "2-7");
+    }
+
+    #[test]
+    fn test_word_range_from_str_single() 
+    {
+        let range: WordRange = "3".parse().unwrap();
+        assert_eq!(range, WordRange::Single(NonZeroU32::new(3).unwrap()));
+    }
+
+    #[test]
+    fn test_word_range_from_str_range() 
+    {
+        let range: WordRange = "4-8".parse().unwrap();
+        assert_eq!(
+            range,
+            WordRange::Range(NonZeroU32::new(4).unwrap(), NonZeroU32::new(8).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_word_range_from_str_invalid() 
+    {
+        let result: Result<WordRange, _> = "0".parse();
+        assert!(result.is_err());
+
+        let result: Result<WordRange, _> = "a-b".parse();
+        assert!(result.is_err());
+
+        let result: Result<WordRange, _> = "1-".parse();
+        assert!(result.is_err());
+
+        let result: Result<WordRange, _> = "-2".parse();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_word_range_serde_single() 
+    {
+        let range = WordRange::Single(NonZeroU32::new(9).unwrap());
+        let serialized = serde_json::to_string(&range).unwrap();
+        assert_eq!(serialized, "\"9\"");
+        let deserialized: WordRange = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, range);
+    }
+
+    #[test]
+    fn test_word_range_serde_range() 
+    {
+        let range = WordRange::Range(NonZeroU32::new(1).unwrap(), NonZeroU32::new(3).unwrap());
+        let serialized = serde_json::to_string(&range).unwrap();
+        assert_eq!(serialized, "\"1-3\"");
+        let deserialized: WordRange = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(deserialized, range);
+    }
+}

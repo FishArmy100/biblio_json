@@ -435,3 +435,135 @@ impl<'de> Deserialize<'de> for RefId
         RefId::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn nz(n: u32) -> NonZeroU32 
+    {
+        NonZeroU32::new(n).unwrap()
+    }
+
+    #[test]
+    fn test_refid_from_str_single_verse() 
+    {
+        let refid = RefId::from_str("Gen.1.1").unwrap();
+        assert_eq!(
+            refid,
+            RefId::Single(Atom::Verse {
+                book: OsisBook::from_str("Gen").unwrap(),
+                chapter: nz(1),
+                verse: nz(1)
+            })
+        );
+    }
+
+    #[test]
+    fn test_refid_from_str_range() 
+    {
+        let refid = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
+        assert_eq!(
+            refid,
+            RefId::Range {
+                from: Atom::Verse {
+                    book: OsisBook::from_str("Gen").unwrap(),
+                    chapter: nz(1),
+                    verse: nz(1)
+                },
+                to: Atom::Verse {
+                    book: OsisBook::from_str("Gen").unwrap(),
+                    chapter: nz(1),
+                    verse: nz(5)
+                }
+            }
+        );
+    }
+
+    #[test]
+    fn test_refid_has_verse_true() 
+    {
+        let refid = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
+        let verse_id = VerseId::from_str("Gen.1.3").unwrap();
+        assert!(refid.has_verse(&verse_id));
+    }
+
+    #[test]
+    fn test_refid_has_verse_false() 
+    {
+        let refid = RefId::from_str("Gen.1.2-Gen.1.5").unwrap();
+        let verse_id = VerseId::from_str("Gen.1.1").unwrap();
+        assert!(!refid.has_verse(&verse_id));
+    }
+
+    #[test]
+    fn test_refid_has_verse_word_true() 
+    {
+        let refid = RefId::from_str("Gen.1.1#2").unwrap();
+        let verse_id = VerseId::from_str("Gen.1.1").unwrap();
+        assert!(refid.has_verse_word(&verse_id, nz(2)));
+    }
+
+    #[test]
+    fn test_refid_has_verse_word_false() 
+    {
+        let refid = RefId::from_str("Gen.1.1#2").unwrap();
+        let verse_id = VerseId::from_str("Gen.1.1").unwrap();
+        assert!(!refid.has_verse_word(&verse_id, nz(3)));
+    }
+
+    #[test]
+    fn test_refid_is_valid() 
+    {
+        let valid_range = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
+        assert!(valid_range.is_valid());
+
+        let invalid_range = RefId::Range {
+            from: Atom::Book { book: OsisBook::from_str("Gen").unwrap() },
+            to: Atom::Verse { book: OsisBook::from_str("Gen").unwrap(), chapter: nz(1), verse: nz(1) }
+        };
+        assert!(!invalid_range.is_valid());
+    }
+
+    #[test]
+    fn test_refid_display() 
+    {
+        let refid = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
+        assert_eq!(refid.to_string(), "Gen.1.1-Gen.1.5");
+        let single = RefId::from_str("Gen.1.1#2").unwrap();
+        assert_eq!(single.to_string(), "Gen.1.1#2");
+    }
+
+    #[test]
+    fn test_refid_is_book_chapter_verse_word() 
+    {
+        let book = RefId::from_str("Gen").unwrap();
+        assert!(book.is_book());
+        assert!(!book.is_chapter());
+        assert!(!book.is_verse());
+        assert!(!book.is_word());
+
+        let chapter = RefId::from_str("Gen.1").unwrap();
+        assert!(chapter.is_chapter());
+
+        let verse = RefId::from_str("Gen.1.1").unwrap();
+        assert!(verse.is_verse());
+
+        let word = RefId::from_str("Gen.1.1#1").unwrap();
+        assert!(word.is_word());
+    }
+
+    #[test]
+    fn test_refid_get_verse_components() 
+    {
+        let verse = RefId::from_str("Gen.1.1").unwrap();
+        let components = verse.get_verse_components();
+        assert_eq!(
+            components,
+            Some((&OsisBook::from_str("Gen").unwrap(), 1, 1))
+        );
+
+        let not_verse = RefId::from_str("Gen.1").unwrap();
+        assert_eq!(not_verse.get_verse_components(), None);
+    }
+}
+
