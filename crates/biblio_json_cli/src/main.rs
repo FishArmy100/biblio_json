@@ -61,7 +61,7 @@ fn main()
             match load_package(&path) {
                 Ok(ok) => 
                 {
-                    println!("Package {} loaded with no errors", ok.name());
+                    println!("Package '{}' loaded with no errors", ok.name());
                     ok
                 },
                 Err(e) => return println!("Package loaded with errors {}:\n{}\n", e.len(), e.iter().join("\n"))
@@ -71,7 +71,7 @@ fn main()
             let package = match load_package(&path) {
                 Ok(ok) => 
                 {
-                    println!("Package {} loaded with no errors", ok.name());
+                    println!("Package '{}' loaded with no errors", ok.name());
                     ok
                 },
                 Err(e) => return println!("Package loaded with errors {}:\n{}\n", e.len(), e.iter().join("\n"))
@@ -97,7 +97,7 @@ fn main()
             let package = match load_package(&path) {
                 Ok(ok) => 
                 {
-                    println!("Package {} loaded with no errors", ok.name());
+                    println!("Package '{}' loaded with no errors", ok.name());
                     ok
                 },
                 Err(e) => return println!("Package loaded with errors {}:\n{}\n", e.len(), e.iter().join("\n"))
@@ -106,7 +106,7 @@ fn main()
             let verse_id = match VerseId::from_str(&verse)
             {
                 Ok(ok) => ok,
-                Err(_) => return println!("Verse id {} is not in the proper format", verse)
+                Err(_) => return println!("Verse id '{}' is not in the proper format", verse)
             };
 
             match package.fetch(verse_id, &bible)
@@ -126,7 +126,7 @@ fn main()
                         println!("Fetched:\n{}", result)
                     }
                 },
-                None => println!("No result for fetching verse {} in bible {}", verse_id, bible)
+                None => println!("No result for fetching verse '{}' in bible '{}'", verse_id, bible)
             };
         },
     }

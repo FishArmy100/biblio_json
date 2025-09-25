@@ -132,6 +132,7 @@ impl StrongsLinkEntry
 #[serde(deny_unknown_fields)]
 pub struct StrongsWord
 {
-    pub strongs: StrongsNumber,
+    pub strongs: Vec<StrongsNumber>,
+    pub primary: Option<StrongsNumber>,
     pub range: WordRange,
 }

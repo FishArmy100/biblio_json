@@ -1,5 +1,6 @@
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, ops::Deref, str::FromStr};
 
+use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -85,6 +86,7 @@ impl<'de> Deserialize<'de> for StrongsNumber
         StrongsNumber::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
