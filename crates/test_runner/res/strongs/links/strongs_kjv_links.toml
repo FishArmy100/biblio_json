@@ -1,0 +1,5 @@
+name = "Standard Strongs Definitions"
+license = "Public Domain"
+data_source = "Extracted from the SWORD project's StrongsGreek and StrongsHebrew concordances"
+language = "en"
+bible = "KJV"

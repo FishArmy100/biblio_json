@@ -4,6 +4,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::core::OsisBook;
+use std::collections::HashSet;
 
 lazy_static::lazy_static!
 {
@@ -108,4 +109,69 @@ mod tests
 
         assert_eq!(v1, v2)
     }
+
+    #[test]
+    fn test_invalid_format() 
+    {
+        let invalid_strs = [
+            "Col4.2",      // missing dot
+            "Col.04.2",    // chapter starts with 0
+            "Col.4.02",    // verse starts with 0
+            "Col..4.2",    // extra dot
+            "Col.4",       // missing verse
+            "Col.4.2.1",   // too many parts
+            "Col.0.2",     // chapter zero
+            "Col.4.0",     // verse zero
+            "Col.4.two",   // non-numeric verse
+            "Col.four.2",  // non-numeric chapter
+        ];
+
+        for s in invalid_strs 
+        {
+            assert!(VerseId::from_str(s).is_err(), "Should fail for: {}", s);
+        }
+    }
+
+    #[test]
+    fn test_serialize_deserialize() 
+    {
+        let verse = VerseId {
+            book: OsisBook::Phlm,
+            chapter: NonZeroU32::new(1).unwrap(),
+            verse: NonZeroU32::new(25).unwrap(),
+        };
+        let serialized = serde_json::to_string(&verse).unwrap();
+        assert_eq!(serialized, "\"Phlm.1.25\"");
+        let deserialized: VerseId = serde_json::from_str(&serialized).unwrap();
+        assert_eq!(verse, deserialized);
+    }
+
+    #[test]
+    fn test_display_trait() {
+        let verse = VerseId {
+            book: OsisBook::Gen,
+            chapter: NonZeroU32::new(50).unwrap(),
+            verse: NonZeroU32::new(26).unwrap(),
+        };
+        assert_eq!(format!("{}", verse), "Gen.50.26");
+    }
+
+    #[test]
+    fn test_equality_and_hash() 
+    {
+        let v1 = VerseId {
+            book: OsisBook::John,
+            chapter: NonZeroU32::new(3).unwrap(),
+            verse: NonZeroU32::new(16).unwrap(),
+        };
+        let v2 = VerseId {
+            book: OsisBook::John,
+            chapter: NonZeroU32::new(3).unwrap(),
+            verse: NonZeroU32::new(16).unwrap(),
+        };
+        let mut set = HashSet::new();
+        set.insert(v1);
+        assert!(set.contains(&v2));
+    }
 }
+

@@ -48,7 +48,7 @@ impl BibleModule
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BibleSource
 {
-    pub book_infos: HashMap<u32, BookInfo>,
+    pub book_infos: Vec<BookInfo>,
     pub verses: HashMap<VerseId, Verse>
 }
 
@@ -62,7 +62,7 @@ impl BibleSource
         let mut current_book: Option<&OsisBook> = None;
         let mut book_chapters: Vec<u32> = vec![];
 
-        let mut book_infos = HashMap::new();
+        let mut book_infos = vec![];
 
         for (verse, line) in verses.iter()
         {
@@ -77,7 +77,7 @@ impl BibleSource
                         return Err(format!("Full book name for {} in file {} on line {}, does not exist in the bible config.", old_book, path, line))
                     };
 
-                    book_infos.insert(visited_books.len() as u32, BookInfo {
+                    book_infos.push(BookInfo {
                         name: name.clone(),
                         osis_book: old_book.to_owned(),
                         index: visited_books.len() as u32,
@@ -120,7 +120,7 @@ impl BibleSource
                 return Err(format!("Full book name for {} in file {} on line {}, does not exist in the bible config.", old_book, path, verses.len()))
             };
 
-            book_infos.insert(visited_books.len() as u32, BookInfo {
+            book_infos.push(BookInfo {
                 name: name.clone(),
                 osis_book: old_book.to_owned(),
                 index: visited_books.len() as u32,

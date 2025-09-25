@@ -276,6 +276,27 @@ pub enum ModuleEntry<'a>
     Verse(&'a Verse),
 }
 
+impl<'a> ModuleEntry<'a>
+{
+    pub fn is_dictionary(&self) -> bool
+    {
+        match self 
+        {
+            Self::Dictionary(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn as_dictionary(&self) -> Option<&'a DictEntry>
+    {
+        match self 
+        {
+            Self::Dictionary(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModuleEntryRef
 {

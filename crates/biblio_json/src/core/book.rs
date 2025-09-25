@@ -89,8 +89,10 @@ pub enum OsisBook {
     Rev,
 }
 
-impl std::fmt::Display for OsisBook {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl std::fmt::Display for OsisBook 
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
+    {
         let s = match self {
             OsisBook::Gen => "Gen",
             OsisBook::Exod => "Exod",
@@ -167,8 +169,10 @@ impl FromStr for OsisBook
 {
     type Err = String;
 
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
+    fn from_str(s: &str) -> Result<Self, Self::Err> 
+    {
+        match s 
+        {
             "Gen" => Ok(OsisBook::Gen),
             "Exod" => Ok(OsisBook::Exod),
             "Lev" => Ok(OsisBook::Lev),

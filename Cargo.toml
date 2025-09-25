@@ -5,4 +5,4 @@ resolver = "1"
 members = [
     "./crates/test_runner",
     "./crates/biblio_json"
-]
+, "crates/biblio_json_cli"]

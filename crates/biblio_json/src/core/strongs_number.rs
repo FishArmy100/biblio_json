@@ -1,5 +1,6 @@
-use std::{fmt::Display, str::FromStr};
+use std::{fmt::Display, ops::Deref, str::FromStr};
 
+use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -83,5 +84,66 @@ impl<'de> Deserialize<'de> for StrongsNumber
     {
         let s = String::deserialize(deserializer)?;
         StrongsNumber::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_display() 
+    {
+        let sn = StrongsNumber { lang: StrongsLang::Hebrew, number: 123 };
+        assert_eq!(sn.to_string(), "H123");
+
+        let sn = StrongsNumber { lang: StrongsLang::Greek, number: 456 };
+        assert_eq!(sn.to_string(), "G456");
+    }
+
+    #[test]
+    fn test_from_str_valid() 
+    {
+        let sn: StrongsNumber = "H123".parse().unwrap();
+        assert_eq!(sn.lang, StrongsLang::Hebrew);
+        assert_eq!(sn.number, 123);
+
+        let sn: StrongsNumber = "G456".parse().unwrap();
+        assert_eq!(sn.lang, StrongsLang::Greek);
+        assert_eq!(sn.number, 456);
+    }
+
+    #[test]
+    fn test_from_str_invalid() 
+    {
+        assert!("X123".parse::<StrongsNumber>().is_err());
+        assert!("H12A".parse::<StrongsNumber>().is_err());
+        assert!("123".parse::<StrongsNumber>().is_err());
+        assert!("".parse::<StrongsNumber>().is_err());
+    }
+
+    #[test]
+    fn test_serde_serialize() 
+    {
+        let sn = StrongsNumber { lang: StrongsLang::Hebrew, number: 789 };
+        let json = serde_json::to_string(&sn).unwrap();
+        assert_eq!(json, "\"H789\"");
+    }
+
+    #[test]
+    fn test_serde_deserialize() 
+    {
+        let json = "\"G321\"";
+        let sn: StrongsNumber = serde_json::from_str(json).unwrap();
+        assert_eq!(sn.lang, StrongsLang::Greek);
+        assert_eq!(sn.number, 321);
+    }
+
+    #[test]
+    fn test_serde_deserialize_invalid() 
+    {
+        let json = "\"X999\"";
+        let result: Result<StrongsNumber, _> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 }
