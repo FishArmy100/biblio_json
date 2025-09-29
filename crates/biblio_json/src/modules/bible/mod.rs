@@ -113,7 +113,7 @@ impl BibleSource
                         return Err(format!("Full book name for {} in file {} on line {}, does not exist in the bible config.", old_book, path, line))
                     };
 
-                    let Some(abbreviation) = config.get_abbreviated_book(*book) else {
+                    let Some(abbreviation) = config.get_abbreviated_book(*old_book) else {
                         return Err(format!("OsisBook {} does not exist in the config", book));
                     };
 
