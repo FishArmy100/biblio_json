@@ -17,6 +17,13 @@ pub struct BibleConfig
     pub pub_year: Option<u32>,
     pub license: Option<String>,
     pub books: HashMap<OsisBook, String>,
+
+    #[serde(default)]
+    pub book_abbreviations: HashMap<OsisBook, String>,
+
+    #[serde(default)]
+    pub book_aliases: HashMap<OsisBook, Vec<String>>,
+
     #[serde(default)]
     pub external: ExternalModuleData,
 }
