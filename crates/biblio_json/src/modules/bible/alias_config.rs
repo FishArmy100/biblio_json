@@ -5,14 +5,12 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use crate::core::{OsisBook, lang::Language};
 use maplit::hashmap;
 
-
-
 #[derive(Debug, Default)]
-pub struct AliasConfig(HashMap<OsisBook, Vec<String>>);
+pub struct AliasConfig(HashMap<String, OsisBook>);
 
 impl Deref for AliasConfig
 {
-    type Target = HashMap<OsisBook, Vec<String>>;
+    type Target = HashMap<String, OsisBook>;
 
     fn deref(&self) -> &Self::Target 
     {
@@ -31,7 +29,7 @@ impl<'de> Deserialize<'de> for AliasConfig
         enum Helper 
         {
             Str(String),                    // matches when TOML has a string
-            Map(HashMap<OsisBook, Vec<String>>), // matches when TOML has a table
+            Map(HashMap<String, OsisBook>), // matches when TOML has a table
         }
 
         match Helper::deserialize(deserializer)? 
@@ -62,30 +60,40 @@ impl Serialize for AliasConfig
 }
 
 lazy_static::lazy_static! {
-    static ref DEFAULT_LANGUAGE_BOOK_ALIASES: HashMap<Language, HashMap<OsisBook, Vec<String>>> = hashmap! {
-        Language::new("en").unwrap() => hashmap! {
-            OsisBook::Num => vec!["nm".into()],
-            OsisBook::Deut => vec!["dt".into()],
-            OsisBook::Josh => vec!["jsh".into()],
-            OsisBook::Judg => vec!["jdg".into(), "jdgs".into()],
-            OsisBook::Sam1 => vec!["1 sm".into()],
-            OsisBook::Sam2 => vec!["2 sm".into()],
-            OsisBook::Job => vec!["jb".into()],
-            OsisBook::Ps => vec!["pss".into(), "psalms".into()],
-            OsisBook::Prov => vec!["prv".into()],
-            OsisBook::Song => vec!["sg".into(), "ss".into(), "sos".into()],
-            OsisBook::Joel => vec!["jl".into()],
-            OsisBook::Obad => vec!["obd".into()],
-            OsisBook::Hab => vec!["hb".into()],
-            OsisBook::Hag => vec!["hg".into()],
-            OsisBook::Mal => vec!["ml".into()],
-            OsisBook::Matt => vec!["mt".into()],
-            OsisBook::Mark => vec!["mk".into()],
-            OsisBook::Luke => vec!["lk".into()],
-            OsisBook::John => vec!["jn".into()],
-            OsisBook::Jas => vec!["jas".into()],
-            OsisBook::Phil => vec!["php".into()],
-            OsisBook::Phlm => vec!["phm".into()],
+    static ref DEFAULT_LANGUAGE_BOOK_ALIASES: HashMap<Language, HashMap<String, OsisBook>> = hashmap! {
+        Language::new("en").unwrap() => {
+            let map = HashMap::from([
+                ("nm".to_string(), OsisBook::Num),
+                ("dt".to_string(), OsisBook::Deut),
+                ("jsh".to_string(), OsisBook::Josh),
+                ("jdg".to_string(), OsisBook::Judg),
+                ("jdgs".to_string(), OsisBook::Judg),
+                ("1 sm".to_string(), OsisBook::Sam1),
+                ("2 sm".to_string(), OsisBook::Sam2),
+                ("jb".to_string(), OsisBook::Job),
+                ("pss".to_string(), OsisBook::Ps),
+                ("psalms".to_string(), OsisBook::Ps),
+                ("prv".to_string(), OsisBook::Prov),
+                ("sg".to_string(), OsisBook::Song),
+                ("ss".to_string(), OsisBook::Song),
+                ("sos".to_string(), OsisBook::Song),
+                ("jl".to_string(), OsisBook::Joel),
+                ("obd".to_string(), OsisBook::Obad),
+                ("hb".to_string(), OsisBook::Hab),
+                ("hg".to_string(), OsisBook::Hag),
+                ("ml".to_string(), OsisBook::Mal),
+                ("mt".to_string(), OsisBook::Matt),
+                ("mk".to_string(), OsisBook::Mark),
+                ("lk".to_string(), OsisBook::Luke),
+                ("jn".to_string(), OsisBook::John),
+                ("1 jn".to_string(), OsisBook::John1),
+                ("2 jn".to_string(), OsisBook::John2),
+                ("3 jn".to_string(), OsisBook::John3),
+                ("jas".to_string(), OsisBook::Jas),
+                ("php".to_string(), OsisBook::Phil),
+                ("phm".to_string(), OsisBook::Phlm),
+            ]);
+            map
         }
     };
 }
