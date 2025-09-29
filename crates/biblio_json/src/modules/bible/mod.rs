@@ -31,6 +31,27 @@ pub struct BibleConfig
     pub external: ExternalModuleData,
 }
 
+impl BibleConfig
+{
+    
+
+    pub fn get_abbreviated_book(&self, book: OsisBook) -> Option<&str>
+    {
+        if let Some(book) = self.book_abbreviations.get(&book)
+        {
+            Some(&book)
+        }
+        else if let Some(book) = self.books.get(&book)
+        {
+            Some(&book)
+        }
+        else
+        {
+            None
+        }
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BibleModule
 {
@@ -46,7 +67,7 @@ impl BibleModule
         let config: BibleConfig = utils::load_toml(config_path)?;
 
         let bible_path = format!("{}/{}.jsonl", dir_path, name);
-        let source = BibleSource::from_file(&bible_path, &config.books)?;
+        let source = BibleSource::from_file(&bible_path, &config.books, &config)?;
 
         Ok(Self { 
             config,
@@ -56,18 +77,7 @@ impl BibleModule
 
     pub fn get_abbreviated_book(&self, book: OsisBook) -> Option<&str>
     {
-        if let Some(book) = self.config.book_abbreviations.get(&book)
-        {
-            Some(&book)
-        }
-        else if let Some(book) = self.config.books.get(&book)
-        {
-            Some(&book)
-        }
-        else
-        {
-            None
-        }
+        self.config.get_abbreviated_book(book)
     }
 }
 
@@ -80,7 +90,7 @@ pub struct BibleSource
 
 impl BibleSource
 {
-    pub fn from_file(path: &str, books: &HashMap<OsisBook, String>) -> Result<BibleSource, String>
+    pub fn from_file(path: &str, books: &HashMap<OsisBook, String>, config: &BibleConfig) -> Result<BibleSource, String>
     {
         let verses: Vec<(Verse, usize)> = utils::load_json_lines(path)?;
 
@@ -103,11 +113,16 @@ impl BibleSource
                         return Err(format!("Full book name for {} in file {} on line {}, does not exist in the bible config.", old_book, path, line))
                     };
 
+                    let Some(abbreviation) = config.get_abbreviated_book(*book) else {
+                        return Err(format!("OsisBook {} does not exist in the config", book));
+                    };
+
                     book_infos.push(BookInfo {
                         name: name.clone(),
                         osis_book: old_book.to_owned(),
                         index: visited_books.len() as u32,
                         chapters: book_chapters,
+                        abbreviation: abbreviation.into(),
                     });
                 }
 
@@ -146,11 +161,16 @@ impl BibleSource
                 return Err(format!("Full book name for {} in file {} on line {}, does not exist in the bible config.", old_book, path, verses.len()))
             };
 
+            let Some(abbreviation) = config.get_abbreviated_book(*old_book) else {
+                return Err(format!("OsisBook {} does not exist in the config", old_book));
+            };
+
             book_infos.push(BookInfo {
                 name: name.clone(),
                 osis_book: old_book.to_owned(),
                 index: visited_books.len() as u32,
                 chapters: book_chapters,
+                abbreviation: abbreviation.into(),
             });
         }
 
@@ -223,6 +243,7 @@ pub struct Word
 pub struct BookInfo
 {
     pub name: String,
+    pub abbreviation: String,
     pub osis_book: OsisBook,
     pub index: u32,
     pub chapters: Vec<u32>
