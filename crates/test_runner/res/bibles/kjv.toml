@@ -133,3 +133,6 @@ Jas = "James"
 3John = "3 John"  
 Jude = "Jude"  
 Rev = "Revelation"
+
+[book_aliases]
+Song = [ "sos" ]
