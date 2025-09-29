@@ -1,8 +1,11 @@
+pub mod alias_config;
+pub mod abbrev_config;
+
 use std::{collections::{HashMap, HashSet}, num::NonZeroU32};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{Atom, OsisBook, RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData}, utils};
+use crate::{core::{Atom, OsisBook, RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, bible::{abbrev_config::AbbrevConfig, alias_config::AliasConfig}}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -19,10 +22,10 @@ pub struct BibleConfig
     pub books: HashMap<OsisBook, String>,
 
     #[serde(default)]
-    pub book_abbreviations: HashMap<OsisBook, String>,
+    pub book_abbreviations: AbbrevConfig,
 
     #[serde(default)]
-    pub book_aliases: HashMap<OsisBook, Vec<String>>,
+    pub book_aliases: AliasConfig,
 
     #[serde(default)]
     pub external: ExternalModuleData,
@@ -49,6 +52,22 @@ impl BibleModule
             config,
             source,
         })
+    }
+
+    pub fn get_abbreviated_book(&self, book: OsisBook) -> Option<&str>
+    {
+        if let Some(book) = self.config.book_abbreviations.get(&book)
+        {
+            Some(&book)
+        }
+        else if let Some(book) = self.config.books.get(&book)
+        {
+            Some(&book)
+        }
+        else
+        {
+            None
+        }
     }
 }
 

@@ -66,6 +66,9 @@ description = """
 language = "en"
 data_source = "https://github.com/scrollmapper/bible_databases/tree/master/sources/en/KJV"
 
+book_aliases = "en"
+book_abbreviations = "en"
+
 [books]
 Gen = "Genesis"  
 Exod = "Exodus"  
@@ -133,6 +136,3 @@ Jas = "James"
 3John = "3 John"  
 Jude = "Jude"  
 Rev = "Revelation"
-
-[book_aliases]
-Song = [ "sos" ]
