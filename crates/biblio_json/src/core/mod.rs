@@ -11,9 +11,9 @@ pub use ref_id::*;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 pub use strongs_number::*;
-pub use verse_id::*;
 pub use book::*;
-
+pub use chapter_id::*;
+pub use verse_id::*;
 
 lazy_static::lazy_static!
 {
