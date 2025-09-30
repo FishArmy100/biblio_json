@@ -3,6 +3,7 @@ pub mod strongs_number;
 pub mod verse_id;
 pub mod book;
 pub mod lang;
+pub mod chapter_id;
 
 use std::{fmt::Display, num::NonZeroU32, str::FromStr};
 
