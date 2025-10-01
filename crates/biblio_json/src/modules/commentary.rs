@@ -57,7 +57,7 @@ impl CommentaryModule
             {
                 if !bible.source.id_exists(&r)
                 {
-                    errors.push(ModuleValidationError::RefIdDoesNotExist(*r, bible_name.clone()));
+                    errors.push(ModuleValidationError::RefIdDoesNotExist(r.clone(), bible_name.clone()));
                 }
             }
 
@@ -77,7 +77,7 @@ impl CommentaryModule
             {
                 if r.is_word()
                 {
-                    errors.push(ModuleValidationError::WordRefIdInvalid(*r));
+                    errors.push(ModuleValidationError::WordRefIdInvalid(r.clone()));
                 }
             }
 

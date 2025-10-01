@@ -5,7 +5,7 @@ use std::{collections::{HashMap, HashSet}, num::NonZeroU32};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{Atom, OsisBook, RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, bible::{abbrev_config::AbbrevConfig, alias_config::AliasConfig}}, utils};
+use crate::{core::{Atom, OsisBook, RefId, RefIdInner, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, bible::{abbrev_config::AbbrevConfig, alias_config::AliasConfig}}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -84,8 +84,9 @@ impl BibleModule
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BibleSource
 {
+    pub name: String,
     pub book_infos: Vec<BookInfo>,
-    pub verses: HashMap<VerseId, Verse>
+    pub verses: HashMap<VerseId, Verse>,
 }
 
 impl BibleSource
@@ -182,15 +183,16 @@ impl BibleSource
         {
             book_infos,
             verses,
+            name: config.name.clone(),
         })
     }
 
     pub fn id_exists(&self, id: &RefId) -> bool
     {
-        match id 
+        match id.id 
         {
-            RefId::Single(atom) => self.id_atom_exists(atom),
-            RefId::Range { from, to } => self.id_atom_exists(from) && self.id_atom_exists(to),
+            RefIdInner::Single(atom) => self.id_atom_exists(&atom),
+            RefIdInner::Range { from, to } => self.id_atom_exists(&from) && self.id_atom_exists(&to),
         }
     }
 

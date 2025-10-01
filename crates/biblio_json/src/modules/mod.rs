@@ -3,6 +3,7 @@ pub mod dict;
 pub mod xrefs;
 pub mod strongs;
 pub mod commentary;
+pub mod notebook;
 
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 
