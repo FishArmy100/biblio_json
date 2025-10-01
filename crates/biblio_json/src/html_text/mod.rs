@@ -98,13 +98,24 @@ impl<'de> Deserialize<'de> for HtmlText
     }
 }
 
+pub struct HtmlValidationContext
+{
+    
+}
+
 struct HtmlValidator;
 
 impl HtmlValidator
 {
-    fn visit_block(&self, block: &Block) -> Result<(), String>
+    fn visit_block(&self, block: &Block, context: ) -> Result<(), String>
     {
-        
+        match block
+        {
+            Block::Paragraph(inlines) => inlines.iter().map(|i| self.visit_inline(i)).collect(),
+            Block::Heading { level, content } => content.iter().map(|i| self.visit_inline(i)).collect(),
+            Block::List { ordered, items } => items.iter().flatten().map(|i| self.visit_inline(i)).collect(),
+            Block::HorizontalRule => todo!(),
+        }
     }
 
     fn visit_inline(&self, inline: &Inline) -> Result<(), String>
