@@ -24,7 +24,7 @@ pub mod ast;
 use std::{collections::HashMap, fmt, ops::Deref, str::FromStr};
 use serde::{Deserialize, Serialize};
 
-use crate::html_text::{ast::{AssetIdName, Block}, lex::Lexer, parse::{ParseError, Parser}};
+use crate::{core::RefId, html_text::{ast::{AssetIdName, Block, Inline}, lex::Lexer, parse::{ParseError, Parser}}};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HtmlText(Vec<Block>);
@@ -53,6 +53,11 @@ impl HtmlText
         
         let mut p = Parser::new(tokens);
         p.parse()
+    }
+
+    pub fn collect_ref_ids(&self) -> Vec<RefId>
+    {
+        let
     }
 }
 
@@ -92,6 +97,22 @@ impl<'de> Deserialize<'de> for HtmlText
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
+
+struct HtmlValidator;
+
+impl HtmlValidator
+{
+    fn visit_block(&self, block: &Block) -> Result<(), String>
+    {
+        
+    }
+
+    fn visit_inline(&self, inline: &Inline) -> Result<(), String>
+    {
+
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

@@ -50,6 +50,14 @@ pub struct ModuleValidationContext<'a>
     pub bibles: &'a HashMap<String, Arc<BibleModule>>,
 }
 
+impl<'a> ModuleValidationContext<'a>
+{
+    pub fn ref_id_exists(&self, id: RefId, default_bible: Option<&BibleModule>)
+    {
+        
+    }
+}
+
 #[serde_as]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum Module

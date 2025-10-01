@@ -4,7 +4,7 @@ use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::core::{StrongsNumber, VerseId};
+use crate::core::{RefId, StrongsNumber, VerseId};
 
 lazy_static::lazy_static!
 {
@@ -141,7 +141,7 @@ impl<'de> Deserialize<'de> for AssetIdName
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum HRefSrc
 {
-    VerseId(VerseId),
+    RefId(RefId),
     Strongs(StrongsNumber),
     ModuleRef {
         module_alias: AssetIdName,
@@ -155,7 +155,7 @@ impl std::fmt::Display for HRefSrc
     {
         match self 
         {
-            HRefSrc::VerseId(verse_id) => write!(f, "{}", verse_id),
+            HRefSrc::RefId(verse_id) => write!(f, "{}", verse_id),
             HRefSrc::Strongs(strongs_number) => write!(f, "{}", strongs_number),
             HRefSrc::ModuleRef { module_alias, entry_id } => write!(f, "{}:{}", module_alias, entry_id),
         }
@@ -168,9 +168,9 @@ impl FromStr for HRefSrc
 
     fn from_str(s: &str) -> Result<Self, Self::Err> 
     {
-        if let Ok(verse_id) = VerseId::from_str(s)
+        if let Ok(ref_id) = RefId::from_str(s)
         {
-            Ok(Self::VerseId(verse_id))
+            Ok(Self::RefId(ref_id))
         }
         else if let Ok(strongs) = StrongsNumber::from_str(s)
         {

@@ -7,7 +7,7 @@ use crate::core::{OsisBook, VerseId};
 
 // Gen.1.4-Gen.1.3:KJV
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RefId 
 {
     pub bible: Option<String>,
