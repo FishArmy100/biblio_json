@@ -11,7 +11,7 @@ use bible::BibleModule;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}};
+use crate::{ValidationContext, core::{RefId, lang::Language}, html_text::{HtmlText, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -41,20 +41,6 @@ impl Display for ModuleValidationError
             ModuleValidationError::WordRefIdInvalid(ref_id) => write!(f, "RefId {} with word indexes is not valid in this context.", ref_id),
             ModuleValidationError::RefIdDoesNotExist(ref_id, bible) => write!(f, "RefId {} does not exist in bible '{}'", ref_id, bible),
         }
-    }
-}
-
-#[derive(Debug, Clone)]
-pub struct ModuleValidationContext<'a>
-{
-    pub bibles: &'a HashMap<String, Arc<BibleModule>>,
-}
-
-impl<'a> ModuleValidationContext<'a>
-{
-    pub fn ref_id_exists(&self, id: RefId, default_bible: Option<&BibleModule>)
-    {
-        
     }
 }
 
@@ -258,7 +244,7 @@ impl Module
         }
     }
 
-    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    pub fn validate(&self, context: &ValidationContext) -> Result<(), Vec<ModuleValidationError>>
     {
         match self 
         {

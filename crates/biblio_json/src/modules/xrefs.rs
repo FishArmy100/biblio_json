@@ -4,9 +4,10 @@ use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
 
+use crate::ValidationContext;
 use crate::core::VerseId;
 use crate::modules::EntryId;
-use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -253,7 +254,7 @@ impl XRefModule
         })
     }
 
-    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    pub fn validate(&self, context: &ValidationContext) -> Result<(), Vec<ModuleValidationError>>
     {
         if let Some(bible_name) = &self.config.bible
         {

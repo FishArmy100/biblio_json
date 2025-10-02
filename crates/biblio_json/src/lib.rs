@@ -2,12 +2,13 @@ pub(crate) mod utils;
 pub mod modules;
 pub mod core;
 pub mod html_text;
+pub mod validation;
 use std::{collections::HashMap, fmt::Display, num::NonZeroU32, path::Path, sync::Arc};
 use flate2::Compression;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationContext, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::XRefModule}};
+use crate::{core::{RefId, StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::XRefModule}, validation::ValidationContext};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -418,7 +419,7 @@ impl Package
             _ => None,
         }).map(|b| (b.config.name.clone(), b)).collect::<HashMap<_, _>>();
 
-        let context = ModuleValidationContext {
+        let context = ValidationContext {
             bibles: &bibles
         };
 

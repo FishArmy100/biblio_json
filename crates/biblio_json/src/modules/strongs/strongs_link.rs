@@ -3,7 +3,7 @@ use std::{collections::HashMap, fmt::Display, num::NonZeroU32, str::FromStr};
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{core::{RefId, StrongsNumber, VerseId, WordRange, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
+use crate::{core::{RefId, StrongsNumber, VerseId, WordRange, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ValidationContext, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -59,7 +59,7 @@ impl StrongsLinksModule
         }
     }
 
-    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    pub fn validate(&self, context: &ValidationContext) -> Result<(), Vec<ModuleValidationError>>
     {
         let bible_name = &self.config.bible;
         let Some(bible) = context.bibles.get(bible_name) else
