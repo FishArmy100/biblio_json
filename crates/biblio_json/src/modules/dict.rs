@@ -82,6 +82,12 @@ impl DictModule
             .map(|errors| errors.into_iter().map(|error| ModuleValidationError::HtmlError { error }).collect_vec())
             .unwrap_or_default();
 
+        let duplicates = utils::find_duplicates(self.entries.iter().map(|e| e.id))
+            .map(|d| ModuleValidationError::EntryIdDuplicate { id: d })
+            .collect_vec();
+
+        errors.extend(duplicates);
+
         for entry in &self.entries
         {
             let entry_errors = entry.definitions.iter()

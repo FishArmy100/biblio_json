@@ -11,7 +11,7 @@ use bible::BibleModule;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::{ValidationContext, core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
+use crate::{ValidationContext, core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, notebook::{NotebookEntry, NotebookModule}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -38,6 +38,10 @@ pub enum ModuleValidationError
     HtmlError 
     {
         error: HtmlValidationError,
+    },
+    EntryIdDuplicate
+    {
+        id: EntryId,
     }
 }
 
@@ -52,7 +56,8 @@ impl Display for ModuleValidationError
                 RefIdValidationError::DoesNotExist => write!(f, "RefId {} does not exist in bible in the current context", id),
                 RefIdValidationError::NeedsBible => write!(f, "RefId {} needs a bible reference", id),
             },
-            Self::HtmlError { error } => write!(f, "{}", error)
+            Self::HtmlError { error } => write!(f, "{}", error),
+            Self::EntryIdDuplicate { id } => write!(f, "Duplicate entries for id '{}'", id),
         }
     }
 }
@@ -66,7 +71,8 @@ pub enum Module
     XRef(#[serde_as(as = "Arc<_>")] Arc<XRefModule>),
     StrongsDefs(#[serde_as(as = "Arc<_>")] Arc<StrongsDefsModule>),
     StrongsLinks(#[serde_as(as = "Arc<_>")] Arc<StrongsLinksModule>),
-    Commentary(#[serde_as(as = "Arc<_>")] Arc<CommentaryModule>)
+    Commentary(#[serde_as(as = "Arc<_>")] Arc<CommentaryModule>),
+    Notebook(#[serde_as(as = "Arc<_>")] Arc<NotebookModule>),
 }
 
 impl Module
@@ -179,6 +185,24 @@ impl Module
         }
     }
 
+    pub fn is_notebook(&self) -> bool
+    {
+        match self 
+        {
+            Self::Notebook(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn as_notebook(&self) -> Option<Arc<NotebookModule>>
+    {
+        match self 
+        {
+            Self::Notebook(n) => Some(n.clone()),
+            _ => None,
+        }
+    }
+
     pub fn name(&self) -> &str 
     {
         match self 
@@ -189,6 +213,7 @@ impl Module
             Module::StrongsDefs(strongs) => &strongs.config.name,
             Module::StrongsLinks(strongs_links_module) => &strongs_links_module.config.name,
             Module::Commentary(commentary_module) => &commentary_module.config.name,
+            Module::Notebook(notebook_module) => &notebook_module.config.name,
         }
     }
 
@@ -202,6 +227,7 @@ impl Module
             Module::StrongsDefs(strongs_defs_module) => strongs_defs_module.config.description.as_ref(),
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.description.as_ref(),
             Module::Commentary(commentary_module) => commentary_module.config.description.as_ref(),
+            Module::Notebook(notebook_module) => notebook_module.config.description.as_ref(),
         }
     }
 
@@ -215,6 +241,7 @@ impl Module
             Module::StrongsDefs(strongs_defs_module) => strongs_defs_module.config.language,
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.language,
             Module::Commentary(commentary_module) => commentary_module.config.language,
+            Module::Notebook(notebook_module) => notebook_module.config.language,
         }
     }
 
@@ -228,6 +255,7 @@ impl Module
             Module::StrongsDefs(strongs_defs_module) => strongs_defs_module.config.authors.as_ref(),
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.authors.as_ref(),
             Module::Commentary(commentary_module) => commentary_module.config.authors.as_ref(),
+            Module::Notebook(notebook_module) => notebook_module.config.authors.as_ref(),
         }
     }
 
@@ -241,6 +269,7 @@ impl Module
             Module::StrongsDefs(strongs_defs_module) => strongs_defs_module.config.pub_year,
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.pub_year,
             Module::Commentary(commentary_module) => commentary_module.config.pub_year,
+            Module::Notebook(notebook_module) => notebook_module.config.pub_year,
         }
     }
 
@@ -254,6 +283,7 @@ impl Module
             Module::StrongsDefs(strongs_defs_module) => &strongs_defs_module.config.external,
             Module::StrongsLinks(strongs_links_module) => &strongs_links_module.config.external,
             Module::Commentary(commentary_module) => &commentary_module.config.external,
+            Module::Notebook(notebook_module) => &notebook_module.config.external,
         }
     }
 
@@ -267,6 +297,7 @@ impl Module
             Module::StrongsDefs(defs) => defs.validate(builder),
             Module::StrongsLinks(links) => links.validate(builder),
             Module::Commentary(commentary) => commentary.validate(builder),
+            Module::Notebook(notebook_module) => notebook_module.validate(builder),
         }
     }
 
@@ -280,7 +311,24 @@ impl Module
             Module::StrongsDefs(strongs_defs_module) => strongs_defs_module.entries.iter().find(|e| e.id == entry).is_some(),
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.entries.iter().find(|e| e.id == entry).is_some(),
             Module::Commentary(commentary_module) => commentary_module.entries.iter().find(|e| e.id == entry).is_some(),
+            Module::Notebook(notebook_module) => notebook_module.entries.iter().find(|e| e.id() == entry).is_some(),
         }
+    }
+
+    pub fn get_entry(&self, entry_id: EntryId) -> Option<ModuleEntry>
+    {
+        let entry = match self 
+        {
+            Module::Bible(bible) => ModuleEntry::Verse(bible.source.verses.values().find(|v| v.id == entry_id)?),
+            Module::Dictionary(dict) => ModuleEntry::Dictionary(dict.entries.iter().find(|e| e.id == entry_id)?),
+            Module::XRef(xref) => ModuleEntry::XRef(xref.entries.iter().find(|e| e.id() == entry_id)?),
+            Module::StrongsDefs(strongs_defs) => ModuleEntry::StrongsDef(strongs_defs.entries.iter().find(|e| e.id == entry_id)?),
+            Module::StrongsLinks(strongs_links) => ModuleEntry::StrongsLink(strongs_links.entries.iter().find(|e| e.id == entry_id)?),
+            Module::Commentary(commentary) => ModuleEntry::Commentary(commentary.entries.iter().find(|e| e.id == entry_id)?),
+            Module::Notebook(notebook) => ModuleEntry::Notebook(notebook.entries.iter().find(|e| e.id() == entry_id)?),
+        };
+
+        Some(entry)
     }
 }
 
@@ -295,24 +343,105 @@ pub enum ModuleEntry<'a>
     XRef(&'a XRefEntry),
     Commentary(&'a CommentaryEntry),
     Verse(&'a Verse),
+    Notebook(&'a NotebookEntry),
 }
 
 impl<'a> ModuleEntry<'a>
 {
-    pub fn is_dictionary(&self) -> bool
+    pub fn is_dictionary(&self) -> bool 
     {
-        match self 
-        {
-            Self::Dictionary(_) => true,
-            _ => false,
-        }
+        matches!(self, Self::Dictionary(_))
     }
 
-    pub fn as_dictionary(&self) -> Option<&'a DictEntry>
+    pub fn as_dictionary(&self) -> Option<&'a DictEntry> 
     {
         match self 
         {
             Self::Dictionary(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn is_strongs_def(&self) -> bool 
+    {
+        matches!(self, Self::StrongsDef(_))
+    }
+
+    pub fn as_strongs_def(&self) -> Option<&'a StrongsDefEntry> 
+    {
+        match self 
+        {
+            Self::StrongsDef(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn is_strongs_link(&self) -> bool 
+    {
+        matches!(self, Self::StrongsLink(_))
+    }
+
+    pub fn as_strongs_link(&self) -> Option<&'a StrongsLinkEntry> 
+    {
+        match self 
+        {
+            Self::StrongsLink(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn is_xref(&self) -> bool 
+    {
+        matches!(self, Self::XRef(_))
+    }
+
+    pub fn as_xref(&self) -> Option<&'a XRefEntry> 
+    {
+        match self 
+        {
+            Self::XRef(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn is_commentary(&self) -> bool 
+    {
+        matches!(self, Self::Commentary(_))
+    }
+
+    pub fn as_commentary(&self) -> Option<&'a CommentaryEntry> 
+    {
+        match self 
+        {
+            Self::Commentary(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn is_verse(&self) -> bool 
+    {
+        matches!(self, ModuleEntry::Verse(_))
+    }
+
+    pub fn as_verse(&self) -> Option<&'a Verse> 
+    {
+        match self 
+        {
+            ModuleEntry::Verse(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn is_notebook(&self) -> bool 
+    {
+        matches!(self, ModuleEntry::Notebook(_))
+    }
+
+    pub fn as_notebook(&self) -> Option<&'a NotebookEntry> 
+    {
+        match self 
+        {
+            ModuleEntry::Notebook(e) => Some(e),
             _ => None,
         }
     }

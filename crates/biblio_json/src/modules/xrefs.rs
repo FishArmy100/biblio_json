@@ -279,6 +279,13 @@ impl XRefModule
         }
 
         let mut errors = vec![];
+
+        let duplicates = utils::find_duplicates(self.entries.iter().map(|e| e.id()))
+            .map(|d| ModuleValidationError::EntryIdDuplicate { id: d })
+            .collect_vec();
+
+        errors.extend(duplicates);
+
         for id in self.entries.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
         {
             if let Err(error) = context.validate_ref_id(&id)

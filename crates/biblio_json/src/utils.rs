@@ -1,4 +1,4 @@
-use std::{fs, path::Path};
+use std::{fs, hash::Hash, path::Path};
 
 use flate2::{Compression, read::{ZlibDecoder, ZlibEncoder}};
 use itertools::Itertools;
@@ -84,4 +84,13 @@ pub fn decompress(data: &[u8]) -> Vec<u8>
     let mut decompressed = Vec::new();
     decoder.read_to_end(&mut decompressed).unwrap();
     decompressed
+}
+
+pub fn find_duplicates<I, T>(i: I) -> impl Iterator<Item = T>
+    where I : Iterator<Item = T>,
+          T : Hash + Eq,
+{
+    i.counts().into_iter()
+        .filter(|(_, count)| *count > 1)
+        .map(|(val, _)| val)
 }

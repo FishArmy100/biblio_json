@@ -73,6 +73,10 @@ impl StrongsDefsModule
     {
         let context = builder.build(None, &self.config.external);
 
+        let duplicate_errors = utils::find_duplicates(self.entries.iter().map(|e| e.id))
+            .map(|d| ModuleValidationError::EntryIdDuplicate { id: d })
+            .collect_vec();
+
         let config_errors = self.config.description.as_ref().iter()
             .flat_map(|d| d.validate(&context).err())
             .flatten()
@@ -98,6 +102,7 @@ impl StrongsDefsModule
         let mut errors = vec![];
         errors.extend(config_errors);
         errors.extend(entry_errors);
+        errors.extend(duplicate_errors);
 
         if errors.len() > 0
         {

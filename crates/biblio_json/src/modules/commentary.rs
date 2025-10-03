@@ -58,6 +58,10 @@ impl CommentaryModule
             }
         }
 
+        let duplicates = utils::find_duplicates(self.entries.iter().map(|e| e.id))
+            .map(|d| ModuleValidationError::EntryIdDuplicate { id: d })
+            .collect_vec();
+
         let config_errors = self.config.description.as_ref().iter()
             .flat_map(|d| d.validate(&context).err())
             .flatten()
@@ -86,6 +90,7 @@ impl CommentaryModule
         let mut errors = vec![];
         errors.extend(config_errors);
         errors.extend(entry_errors);
+        errors.extend(duplicates);
 
         if errors.len() > 0
         {
