@@ -8,7 +8,7 @@ use flate2::Compression;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::XRefModule}, validation::ValidationContext};
+use crate::{core::{RefId, StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::XRefModule}, validation::{ValidationContext, ValidationContextBuilder}};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -419,14 +419,19 @@ impl Package
             _ => None,
         }).map(|b| (b.config.name.clone(), b)).collect::<HashMap<_, _>>();
 
-        let context = ValidationContext {
-            bibles: &bibles
+        let all_modules = modules.iter()
+            .map(|m| (m.name().to_string(), m.clone()))
+            .collect::<HashMap<_, _>>();
+
+        let builder = ValidationContextBuilder {
+            bibles: &bibles,
+            all_modules: &all_modules,
         };
 
         let mut errors = vec![];
         for m in modules
         {
-            if let Err(errs) = m.validate(&context)
+            if let Err(errs) = m.validate(&builder)
             {
                 errors.extend(errs.into_iter().map(|error| PackageLoadError::ModuleValidationError { 
                     name: m.name().to_string(), 

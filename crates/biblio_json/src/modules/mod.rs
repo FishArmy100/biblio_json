@@ -11,7 +11,7 @@ use bible::BibleModule;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::{ValidationContext, core::{RefId, lang::Language}, html_text::{HtmlText, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}};
+use crate::{ValidationContext, core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -26,9 +26,19 @@ pub struct ExternalModuleData
 #[derive(Debug)]
 pub enum ModuleValidationError
 {
-    BibleNotFound(String),
-    WordRefIdInvalid(RefId),
-    RefIdDoesNotExist(RefId, String),
+    BibleNotFound
+    {
+        name: String,
+    },
+    RefIdError
+    {
+        id: RefId,
+        error: RefIdValidationError,
+    },
+    HtmlError 
+    {
+        error: HtmlValidationError,
+    }
 }
 
 impl Display for ModuleValidationError
@@ -37,9 +47,12 @@ impl Display for ModuleValidationError
     {
         match self 
         {
-            ModuleValidationError::BibleNotFound(name) => write!(f, "Bible '{}' does not exist.", name),
-            ModuleValidationError::WordRefIdInvalid(ref_id) => write!(f, "RefId {} with word indexes is not valid in this context.", ref_id),
-            ModuleValidationError::RefIdDoesNotExist(ref_id, bible) => write!(f, "RefId {} does not exist in bible '{}'", ref_id, bible),
+            Self::BibleNotFound { name } => write!(f, "Bible '{}' does not exist.", name),
+            Self::RefIdError { id, error } => match error {
+                RefIdValidationError::DoesNotExist => write!(f, "RefId {} does not exist in bible in the current context", id),
+                RefIdValidationError::NeedsBible => write!(f, "RefId {} needs a bible reference", id),
+            },
+            Self::HtmlError { error } => write!(f, "{}", error)
         }
     }
 }
@@ -244,16 +257,29 @@ impl Module
         }
     }
 
-    pub fn validate(&self, context: &ValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
         match self 
         {
-            Module::Bible(_) => Ok(()),
-            Module::Dictionary(_) => Ok(()),
-            Module::XRef(xref_module) => xref_module.validate(context),
-            Module::StrongsDefs(_) => Ok(()),
-            Module::StrongsLinks(strongs_links) => strongs_links.validate(context),
-            Module::Commentary(commentary_module) => commentary_module.validate(context),
+            Module::Bible(bible) => bible.validate(builder),
+            Module::Dictionary(dict) => dict.validate(builder),
+            Module::XRef(xref_module) => xref_module.validate(&builder),
+            Module::StrongsDefs(defs) => defs.validate(builder),
+            Module::StrongsLinks(links) => links.validate(builder),
+            Module::Commentary(commentary) => commentary.validate(builder),
+        }
+    }
+
+    pub fn has_entry(&self, entry: EntryId) -> bool
+    {
+        match self 
+        {
+            Module::Bible(bible_module) => bible_module.source.verses.values().find(|e| e.id == entry).is_some(),
+            Module::Dictionary(dict_module) => dict_module.entries.iter().find(|e| e.id == entry).is_some(),
+            Module::XRef(xref_module) => xref_module.entries.iter().find(|e| e.id() == entry).is_some(),
+            Module::StrongsDefs(strongs_defs_module) => strongs_defs_module.entries.iter().find(|e| e.id == entry).is_some(),
+            Module::StrongsLinks(strongs_links_module) => strongs_links_module.entries.iter().find(|e| e.id == entry).is_some(),
+            Module::Commentary(commentary_module) => commentary_module.entries.iter().find(|e| e.id == entry).is_some(),
         }
     }
 }
