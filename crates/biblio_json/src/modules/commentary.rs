@@ -1,8 +1,9 @@
 use std::num::NonZeroU32;
 
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
+use crate::{core::{RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, ValidationContext}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -43,52 +44,61 @@ impl CommentaryModule
         })
     }
 
-    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
-        if let Some(bible_name) = &self.config.bible
+        let context = builder.build(self.config.bible.as_ref().map(|e| e.as_str()), &self.config.external);
+
+        if let Some(bible) = self.config.bible.as_ref()
         {
-            let Some(bible) = context.bibles.get(bible_name) else
+            if let None = context.bibles.get(bible)
             {
-                return Err(vec![ModuleValidationError::BibleNotFound(bible_name.clone())])
-            };
-
-            let mut errors = vec![];
-            for r in self.entries.iter().map(|e| e.references.iter()).flatten()
-            {
-                if !bible.source.id_exists(&r)
-                {
-                    errors.push(ModuleValidationError::RefIdDoesNotExist(*r, bible_name.clone()));
-                }
-            }
-
-            if errors.len() > 0
-            {
-                Err(errors)
-            }
-            else 
-            {
-                Ok(())    
+                return Err(vec![ModuleValidationError::BibleNotFound {
+                    name: bible.clone()
+                }]);
             }
         }
-        else  
-        {
+
+        let duplicates = utils::find_duplicates(self.entries.iter().map(|e| e.id))
+            .map(|d| ModuleValidationError::EntryIdDuplicate { id: d })
+            .collect_vec();
+
+        let config_errors = self.config.description.as_ref().iter()
+            .flat_map(|d| d.validate(&context).err())
+            .flatten()
+            .map(|error| ModuleValidationError::HtmlError { error })
+            .collect_vec();
+
+        let entry_errors = self.entries.iter().map(|e| {
             let mut errors = vec![];
-            for r in self.entries.iter().map(|e| e.references.iter()).flatten()
+            if let Err(e) = e.comment.validate(&context)
             {
-                if r.is_word()
-                {
-                    errors.push(ModuleValidationError::WordRefIdInvalid(*r));
-                }
+                errors.extend(e.into_iter().map(|e| ModuleValidationError::HtmlError { error: e }));
             }
 
-            if errors.len() > 0
-            {
-                Err(errors)
-            }
-            else 
-            {
-                Ok(())    
-            }
+            let ref_id_errors = e.references.iter()
+                .filter_map(|id| match context.validate_ref_id(id) {
+                    Ok(()) => None,
+                    Err(e) => Some((e, id))
+                })
+                .map(|(e, id)| ModuleValidationError::RefIdError { id: id.clone(), error: e })
+                .collect_vec();
+
+            errors.extend(ref_id_errors);
+            errors
+        }).flatten().collect_vec();
+
+        let mut errors = vec![];
+        errors.extend(config_errors);
+        errors.extend(entry_errors);
+        errors.extend(duplicates);
+
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(())    
         }
     }
 }

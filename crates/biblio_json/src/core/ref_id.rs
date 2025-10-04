@@ -5,27 +5,94 @@ use std::str::FromStr;
 
 use crate::core::{OsisBook, VerseId};
 
-#[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
-pub enum RefId 
+// Gen.1.4-Gen.1.3:KJV
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RefId 
 {
-    Single(Atom),
-    Range { from: Atom, to: Atom },
+    pub bible: Option<String>,
+    pub id: RefIdInner,
 }
 
 impl RefId
 {
     pub fn has_verse_word(&self, verse_id: &VerseId, word_id: NonZeroU32) -> bool 
     {
+        self.id.has_verse_word(verse_id, word_id)
+    }
+
+    /// Will check if the ref_id includes the given parameter `verse_id`
+    /// ```
+    /// let verse_id = VerseId::from_str("Gen.1.1");
+    /// ref_id::from_str("Gen.1.1#1").unwrap().has_verse(verse_id); // true
+    /// ref_id::from_str("Gen.1.1-Gen.1.5").unwrap().has_verse(verse_id); // true
+    /// ref_id::from_str("Gen.1.2-Gen.1.5").unwrap().has_verse(verse_id); // false
+    /// ```
+    pub fn has_verse(&self, verse_id: &VerseId) -> bool
+    {
+        self.id.has_verse(verse_id)
+    } 
+
+    pub fn from_verse_id(verse: VerseId, word: Option<NonZeroU32>) -> Self
+    {
+        Self {
+            bible: None,
+            id: RefIdInner::from_verse_id(verse, word)
+        }
+    }
+
+    pub fn is_uniform(&self) -> bool
+    {
+        self.id.is_uniform()
+    }
+
+    pub fn is_book(&self) -> bool 
+    {  
+        self.id.is_book()
+    }
+
+    pub fn is_chapter(&self) -> bool 
+    {
+        self.id.is_chapter()
+    }
+
+    pub fn is_verse(&self) -> bool 
+    {
+        self.id.is_verse()
+    }
+
+    pub fn is_word(&self) -> bool 
+    {
+        self.id.is_word()
+    }
+
+    pub fn as_verse_id(&self) -> Option<VerseId>
+    {
+        self.id.as_verse_id()
+    }
+}
+
+#[derive(Debug, PartialEq, Clone, Hash, Eq, Copy)]
+pub enum RefIdInner 
+{
+    Single(Atom),
+    Range { from: Atom, to: Atom },
+}
+
+impl RefIdInner
+{
+    pub fn has_verse_word(&self, verse_id: &VerseId, word_id: NonZeroU32) -> bool 
+    {
         match self 
         { 
-            RefId::Single(atom) => match atom 
+            Self::Single(atom) => match atom 
             { 
                 Atom::Book { book } => verse_id.book == *book, 
                 Atom::Chapter { book, chapter } => verse_id.book == *book && verse_id.chapter == *chapter, 
                 Atom::Verse { book, chapter, verse } => verse_id.book == *book && verse_id.chapter == *chapter && verse_id.verse == *verse, 
                 Atom::Word { book, chapter, verse, word } => verse_id.book == *book && verse_id.chapter == *chapter && verse_id.verse == *verse && word_id == *word, 
             }, 
-            RefId::Range { from, to } => 
+            Self::Range { from, to } => 
             { 
                 if verse_id.book < from.book() || verse_id.book > to.book() { return false; } 
                 if verse_id.book == from.book() 
@@ -70,30 +137,31 @@ impl RefId
                             } 
                         } 
                     } 
-                } true 
+                } 
+                true 
             }
         }
     }
 
-    /// Will check if the RefId includes the given parameter `verse_id`
+    /// Will check if the ref_id includes the given parameter `verse_id`
     /// ```
     /// let verse_id = VerseId::from_str("Gen.1.1");
-    /// RefId::from_str("Gen.1.1#1").unwrap().has_verse(verse_id); // true
-    /// RefId::from_str("Gen.1.1-Gen.1.5").unwrap().has_verse(verse_id); // true
-    /// RefId::from_str("Gen.1.2-Gen.1.5").unwrap().has_verse(verse_id); // false
+    /// ref_id::from_str("Gen.1.1#1").unwrap().has_verse(verse_id); // true
+    /// ref_id::from_str("Gen.1.1-Gen.1.5").unwrap().has_verse(verse_id); // true
+    /// ref_id::from_str("Gen.1.2-Gen.1.5").unwrap().has_verse(verse_id); // false
     /// ```
     pub fn has_verse(&self, verse_id: &VerseId) -> bool 
     {
         match self 
         { 
-            RefId::Single(atom) => match atom 
+            Self::Single(atom) => match atom 
             { 
                 Atom::Book { book } => verse_id.book == *book, 
                 Atom::Chapter { book, chapter } => verse_id.book == *book && verse_id.chapter == *chapter, 
                 Atom::Verse { book, chapter, verse } => verse_id.book == *book && verse_id.chapter == *chapter && verse_id.verse == *verse, 
                 Atom::Word { book, chapter, verse, .. } => verse_id.book == *book && verse_id.chapter == *chapter && verse_id.verse == *verse, 
             }, 
-            RefId::Range { from, to } => 
+            Self::Range { from, to } => 
             { 
                 if verse_id.book < from.book() || verse_id.book > to.book() { return false; } 
                 if verse_id.book == from.book() 
@@ -129,8 +197,10 @@ impl RefId
         }
     }
 
-
-    pub fn is_valid(&self) -> bool
+    /// Checks to make sure that it is either `Single`, or `Range` where `from` and `to` are both the same variant of `Atom` \
+    /// **Ex:** `Gen.1.1-Gen.1.2 == true` \
+    /// **Ex:** `Gen.1.2-Gen.1.5#2 == false` 
+    pub fn is_uniform(&self) -> bool
     {
         match self 
         {
@@ -177,8 +247,8 @@ impl RefId
     {  
         match self 
         {
-            RefId::Single(atom) => atom.is_book(),
-            RefId::Range { from, to } => from.is_book() && to.is_book(),
+            Self::Single(atom) => atom.is_book(),
+            Self::Range { from, to } => from.is_book() && to.is_book(),
         }
     }
 
@@ -186,8 +256,8 @@ impl RefId
     {
         match self 
         {
-            RefId::Single(atom) => atom.is_chapter(),
-            RefId::Range { from, to } => from.is_chapter() && to.is_chapter(),
+            Self::Single(atom) => atom.is_chapter(),
+            Self::Range { from, to } => from.is_chapter() && to.is_chapter(),
         }
     }
 
@@ -195,8 +265,8 @@ impl RefId
     {
         match self 
         {
-            RefId::Single(atom) => atom.is_verse(),
-            RefId::Range { from, to } => from.is_verse() && to.is_verse(),
+            Self::Single(atom) => atom.is_verse(),
+            Self::Range { from, to } => from.is_verse() && to.is_verse(),
         }
     }
 
@@ -204,16 +274,16 @@ impl RefId
     {
         match self 
         {
-            RefId::Single(atom) => atom.is_word(),
-            RefId::Range { from, to } => from.is_word() && to.is_word(),
+            Self::Single(atom) => atom.is_word(),
+            Self::Range { from, to } => from.is_word() && to.is_word(),
         }
     }
 
-    pub fn get_verse_components(&self) -> Option<(&OsisBook, u32, u32)>
+    pub fn as_verse_id(&self) -> Option<VerseId>
     {
         if let Self::Single(Atom::Verse { book, chapter, verse }) = self 
         {
-            Some((book, chapter.get(), verse.get()))
+            Some(VerseId { book: *book, chapter: *chapter, verse: *verse })
         }
         else 
         {
@@ -336,14 +406,26 @@ impl fmt::Display for Atom
     }
 }
 
-impl fmt::Display for RefId 
+impl fmt::Display for RefIdInner
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result 
     {
         match self {
-            RefId::Single(atom) => write!(f, "{}", atom),
-            RefId::Range { from, to } => write!(f, "{}-{}", from, to),
+            Self::Single(atom) => write!(f, "{}", atom),
+            Self::Range { from, to } => write!(f, "{}-{}", from, to),
         }
+    }
+}
+
+impl fmt::Display for RefId
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result 
+    {
+        match &self.bible
+        {
+            Some(bible) => write!(f, "{}:{}", self.id, bible),
+            None => write!(f, "{}", self.id)
+        }    
     }
 }
 
@@ -386,21 +468,42 @@ impl FromStr for Atom
     }
 }
 
-impl FromStr for RefId 
+impl FromStr for RefIdInner
 {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> 
     {
         if let Some((from, to)) = s.split_once('-') {
-            Ok(RefId::Range {
+            Ok(Self::Range {
                 from: Atom::from_str(from.trim())?,
                 to: Atom::from_str(to.trim())?,
             })
         } 
         else 
         {
-            Ok(RefId::Single(Atom::from_str(s.trim())?))
+            Ok(Self::Single(Atom::from_str(s.trim())?))
+        }
+    }
+}
+
+impl FromStr for RefId
+{
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> 
+    {
+        if let Some((id, bible)) = s.split_once(':') {
+            Ok(Self {
+                bible: Some(bible.to_owned()),
+                id: RefIdInner::from_str(id)?
+            })
+        } 
+        else 
+        {
+            Ok(Self {
+                bible: None,
+                id: RefIdInner::from_str(s)?
+            })
         }
     }
 }
@@ -409,11 +512,41 @@ impl From<VerseId> for RefId
 {
     fn from(value: VerseId) -> Self 
     {
-        RefId::Single(Atom::Verse { 
+        Self { 
+            bible: None, 
+            id: value.into() 
+        }
+    }
+}
+
+impl From<VerseId> for RefIdInner
+{
+    fn from(value: VerseId) -> Self 
+    {
+        Self::Single(Atom::Verse { 
             book: value.book, 
             chapter: value.chapter, 
             verse: value.verse 
         })
+    }
+}
+
+impl Serialize for RefIdInner 
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: Serializer 
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
+impl<'de> Deserialize<'de> for RefIdInner 
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: Deserializer<'de> 
+    {
+        let s = String::deserialize(deserializer)?;
+        RefIdInner::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
@@ -435,106 +568,113 @@ impl<'de> Deserialize<'de> for RefId
         RefId::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    fn nz(n: u32) -> NonZeroU32 
-    {
+    fn nz(n: u32) -> NonZeroU32 {
         NonZeroU32::new(n).unwrap()
     }
 
     #[test]
-    fn test_refid_from_str_single_verse() 
-    {
-        let refid = RefId::from_str("Gen.1.1").unwrap();
+    fn test_ref_id_from_str_single_verse() {
+        let ref_id = RefId::from_str("Gen.1.1").unwrap();
         assert_eq!(
-            refid,
-            RefId::Single(Atom::Verse {
-                book: OsisBook::from_str("Gen").unwrap(),
-                chapter: nz(1),
-                verse: nz(1)
-            })
+            ref_id,
+            RefId {
+                bible: None,
+                id: RefIdInner::Single(Atom::Verse {
+                    book: OsisBook::from_str("Gen").unwrap(),
+                    chapter: nz(1),
+                    verse: nz(1)
+                })
+            }
         );
     }
 
     #[test]
-    fn test_refid_from_str_range() 
-    {
-        let refid = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
+    fn test_ref_id_from_str_range() {
+        let ref_id = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
         assert_eq!(
-            refid,
-            RefId::Range {
-                from: Atom::Verse {
-                    book: OsisBook::from_str("Gen").unwrap(),
-                    chapter: nz(1),
-                    verse: nz(1)
-                },
-                to: Atom::Verse {
-                    book: OsisBook::from_str("Gen").unwrap(),
-                    chapter: nz(1),
-                    verse: nz(5)
+            ref_id,
+            RefId {
+                bible: None,
+                id: RefIdInner::Range {
+                    from: Atom::Verse {
+                        book: OsisBook::from_str("Gen").unwrap(),
+                        chapter: nz(1),
+                        verse: nz(1)
+                    },
+                    to: Atom::Verse {
+                        book: OsisBook::from_str("Gen").unwrap(),
+                        chapter: nz(1),
+                        verse: nz(5)
+                    }
                 }
             }
         );
     }
 
     #[test]
-    fn test_refid_has_verse_true() 
+    fn test_ref_id_has_verse_true() 
     {
-        let refid = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
+        let ref_id = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
         let verse_id = VerseId::from_str("Gen.1.3").unwrap();
-        assert!(refid.has_verse(&verse_id));
+        assert!(ref_id.has_verse(&verse_id));
     }
 
     #[test]
-    fn test_refid_has_verse_false() 
+    fn test_ref_id_has_verse_false() 
     {
-        let refid = RefId::from_str("Gen.1.2-Gen.1.5").unwrap();
+        let ref_id = RefId::from_str("Gen.1.2-Gen.1.5").unwrap();
         let verse_id = VerseId::from_str("Gen.1.1").unwrap();
-        assert!(!refid.has_verse(&verse_id));
+        assert!(!ref_id.has_verse(&verse_id));
     }
 
     #[test]
-    fn test_refid_has_verse_word_true() 
+    fn test_ref_id_has_verse_word_true() 
     {
-        let refid = RefId::from_str("Gen.1.1#2").unwrap();
+        let ref_id = RefId::from_str("Gen.1.1#2").unwrap();
         let verse_id = VerseId::from_str("Gen.1.1").unwrap();
-        assert!(refid.has_verse_word(&verse_id, nz(2)));
+        assert!(ref_id.has_verse_word(&verse_id, nz(2)));
     }
 
     #[test]
-    fn test_refid_has_verse_word_false() 
+    fn test_ref_id_has_verse_word_false() 
     {
-        let refid = RefId::from_str("Gen.1.1#2").unwrap();
+        let ref_id = RefId::from_str("Gen.1.1#2").unwrap();
         let verse_id = VerseId::from_str("Gen.1.1").unwrap();
-        assert!(!refid.has_verse_word(&verse_id, nz(3)));
+        assert!(!ref_id.has_verse_word(&verse_id, nz(3)));
     }
 
     #[test]
-    fn test_refid_is_valid() 
+    fn test_ref_id_is_uniform() 
     {
-        let valid_range = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
-        assert!(valid_range.is_valid());
+        let uniform_range = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
+        assert!(uniform_range.is_uniform());
 
-        let invalid_range = RefId::Range {
-            from: Atom::Book { book: OsisBook::from_str("Gen").unwrap() },
-            to: Atom::Verse { book: OsisBook::from_str("Gen").unwrap(), chapter: nz(1), verse: nz(1) }
+        let non_uniform_range = RefId {
+            bible: None,
+            id: RefIdInner::Range {
+                from: Atom::Book { book: OsisBook::from_str("Gen").unwrap() },
+                to: Atom::Verse { book: OsisBook::from_str("Gen").unwrap(), chapter: nz(1), verse: nz(1) }
+            }
         };
-        assert!(!invalid_range.is_valid());
+        assert!(!non_uniform_range.is_uniform());
     }
 
     #[test]
-    fn test_refid_display() 
+    fn test_ref_id_display() 
     {
-        let refid = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
-        assert_eq!(refid.to_string(), "Gen.1.1-Gen.1.5");
+        let ref_id = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
+        assert_eq!(ref_id.to_string(), "Gen.1.1-Gen.1.5");
         let single = RefId::from_str("Gen.1.1#2").unwrap();
         assert_eq!(single.to_string(), "Gen.1.1#2");
     }
 
     #[test]
-    fn test_refid_is_book_chapter_verse_word() 
+    fn test_ref_id_is_book_chapter_verse_word() 
     {
         let book = RefId::from_str("Gen").unwrap();
         assert!(book.is_book());
@@ -553,17 +693,20 @@ mod tests {
     }
 
     #[test]
-    fn test_refid_get_verse_components() 
+    fn test_ref_id_as_verse_id() 
     {
         let verse = RefId::from_str("Gen.1.1").unwrap();
-        let components = verse.get_verse_components();
+        let verse_id = verse.as_verse_id();
         assert_eq!(
-            components,
-            Some((&OsisBook::from_str("Gen").unwrap(), 1, 1))
+            verse_id,
+            Some(VerseId {
+                book: OsisBook::from_str("Gen").unwrap(),
+                chapter: nz(1),
+                verse: nz(1)
+            })
         );
 
         let not_verse = RefId::from_str("Gen.1").unwrap();
-        assert_eq!(not_verse.get_verse_components(), None);
+        assert_eq!(not_verse.as_verse_id(), None);
     }
 }
-

@@ -1,7 +1,7 @@
 use itertools::{EitherOrBoth, Itertools};
 use serde::{Deserialize, Serialize};
 
-use crate::{core::lang::Language, html_text::HtmlText, modules::{EntryId, ExternalModuleData}, utils};
+use crate::{core::lang::Language, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -70,6 +70,42 @@ impl DictModule
             let contains_alias = entry.aliases.as_ref().is_some_and(|a| a.iter().find(|t| eq_ignore_punc_and_case(t, term)).is_some());
             eq_ignore_punc_and_case(&entry.term, term) || contains_alias
         })
+    }
+
+    pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
+    {
+        let context = builder.build(Some(&self.config.name), &self.config.external);
+        
+        let mut errors = self.config.description.as_ref()
+            .map(|d| d.validate(&context).err())
+            .flatten()
+            .map(|errors| errors.into_iter().map(|error| ModuleValidationError::HtmlError { error }).collect_vec())
+            .unwrap_or_default();
+
+        let duplicates = utils::find_duplicates(self.entries.iter().map(|e| e.id))
+            .map(|d| ModuleValidationError::EntryIdDuplicate { id: d })
+            .collect_vec();
+
+        errors.extend(duplicates);
+
+        for entry in &self.entries
+        {
+            let entry_errors = entry.definitions.iter()
+                .filter_map(|d| d.validate(&context).err()).flatten()
+                .map(|error| ModuleValidationError::HtmlError { error })
+                .collect_vec();
+
+            errors.extend(entry_errors);
+        }
+
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(())    
+        }
     }
 }
 

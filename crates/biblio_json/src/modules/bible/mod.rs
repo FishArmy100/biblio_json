@@ -3,9 +3,10 @@ pub mod abbrev_config;
 
 use std::{collections::{HashMap, HashSet}, num::NonZeroU32};
 
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{Atom, OsisBook, RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, bible::{abbrev_config::AbbrevConfig, alias_config::AliasConfig}}, utils};
+use crate::{core::{Atom, OsisBook, RefId, RefIdInner, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, bible::{abbrev_config::AbbrevConfig, alias_config::AliasConfig}}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -33,8 +34,6 @@ pub struct BibleConfig
 
 impl BibleConfig
 {
-    
-
     pub fn get_abbreviated_book(&self, book: OsisBook) -> Option<&str>
     {
         if let Some(book) = self.book_abbreviations.get(&book)
@@ -79,13 +78,34 @@ impl BibleModule
     {
         self.config.get_abbreviated_book(book)
     }
+
+    pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
+    {
+        let context = builder.build(Some(&self.config.name), &self.config.external);
+        
+        let errors = self.config.description.as_ref().iter()
+            .flat_map(|d| d.validate(&context).err())
+            .flatten()
+            .map(|error| ModuleValidationError::HtmlError { error })
+            .collect_vec();
+
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(())    
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BibleSource
 {
+    pub name: String,
     pub book_infos: Vec<BookInfo>,
-    pub verses: HashMap<VerseId, Verse>
+    pub verses: HashMap<VerseId, Verse>,
 }
 
 impl BibleSource
@@ -182,15 +202,16 @@ impl BibleSource
         {
             book_infos,
             verses,
+            name: config.name.clone(),
         })
     }
 
     pub fn id_exists(&self, id: &RefId) -> bool
     {
-        match id 
+        match id.id 
         {
-            RefId::Single(atom) => self.id_atom_exists(atom),
-            RefId::Range { from, to } => self.id_atom_exists(from) && self.id_atom_exists(to),
+            RefIdInner::Single(atom) => self.id_atom_exists(&atom),
+            RefIdInner::Range { from, to } => self.id_atom_exists(&from) && self.id_atom_exists(&to),
         }
     }
 

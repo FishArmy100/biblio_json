@@ -4,9 +4,11 @@ use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
 
+use crate::ValidationContext;
 use crate::core::VerseId;
 use crate::modules::EntryId;
-use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
+use crate::validation::{RefIdValidationError, ValidationContextBuilder};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -32,13 +34,13 @@ pub enum XRefEntry
     {
         source: RefId,
         targets: Vec<RefId>,
-        note: Option<String>,
+        note: Option<HtmlText>,
         id: u32,
     },
     Mutual 
     {
         refs: Vec<RefId>,
-        note: Option<String>,
+        note: Option<HtmlText>,
         id: u32,
     },
 }
@@ -82,6 +84,15 @@ impl XRefEntry
         }
     }
 
+    pub fn note(&self) -> Option<&HtmlText>
+    {
+        match self 
+        {
+            XRefEntry::Directed { source: _, targets: _, note, id: _ } => note.as_ref(),
+            XRefEntry::Mutual { refs: _, note, id: _ } => note.as_ref(),
+        }
+    }
+
     pub fn collect_ref_ids(&self) -> Vec<RefId>
     {
         match self {
@@ -111,13 +122,13 @@ impl Serialize for XRefEntry {
                 {
                     source: &'a RefId,
                     targets: &'a Vec<RefId>,
-                    note: &'a Option<String>,
+                    note: &'a Option<HtmlText>,
                     id: EntryId,
                 },
                 Mutual 
                 {
                     refs: &'a Vec<RefId>,
-                    note: &'a Option<String>,
+                    note: &'a Option<HtmlText>,
                     id: EntryId,
                 },
             }
@@ -166,13 +177,13 @@ impl<'de> Deserialize<'de> for XRefEntry
                 {
                     source: RefId,
                     targets: Vec<RefId>,
-                    note: Option<String>,
+                    note: Option<HtmlText>,
                     id: u32,
                 },
                 Mutual 
                 {
                     refs: Vec<RefId>,
-                    note: Option<String>,
+                    note: Option<HtmlText>,
                     id: u32,
                 },
             }
@@ -209,14 +220,14 @@ impl<'de> Deserialize<'de> for XRefEntry
                         {
                             let source: RefId = seq.next_element()?.ok_or_else(|| A::Error::custom("missing source"))?;
                             let targets: Vec<RefId> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing targets"))?;
-                            let note: Option<String> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing note"))?;
+                            let note: Option<HtmlText> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing note"))?;
                             let id: u32 = seq.next_element()?.ok_or_else(|| A::Error::custom("missing id"))?;
                             Ok(XRefEntry::Directed { source, targets, note, id })
                         }
                         1 => 
                         {
                             let refs: Vec<RefId> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing refs"))?;
-                            let note: Option<String> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing note"))?;
+                            let note: Option<HtmlText> = seq.next_element()?.ok_or_else(|| A::Error::custom("missing note"))?;
                             let id: u32 = seq.next_element()?.ok_or_else(|| A::Error::custom("missing id"))?;
                             Ok(XRefEntry::Mutual { refs, note, id })
                         }
@@ -253,52 +264,60 @@ impl XRefModule
         })
     }
 
-    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
-        if let Some(bible_name) = &self.config.bible
+        let context = builder.build(self.config.bible.as_ref().map(|b| b.as_str()), &self.config.external);
+
+        if let Some(bible) = self.config.bible.as_ref()
         {
-            let Some(bible) = context.bibles.get(bible_name) else
+            if let None = context.bibles.get(bible)
             {
-                return Err(vec![ModuleValidationError::BibleNotFound(bible_name.clone())])
-            };
-
-            let mut errors = vec![];
-            for r in self.entries.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
-            {
-                if !bible.source.id_exists(&r)
-                {
-                    errors.push(ModuleValidationError::RefIdDoesNotExist(r, bible_name.clone()));
-                }
-            }
-
-            if errors.len() > 0
-            {
-                Err(errors)
-            }
-            else 
-            {
-                Ok(())    
+                return Err(vec![ModuleValidationError::BibleNotFound {
+                    name: bible.clone()
+                }]);
             }
         }
-        else  
-        {
-            let mut errors = vec![];
-            for r in self.entries.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
-            {
-                if r.is_word()
-                {
-                    errors.push(ModuleValidationError::WordRefIdInvalid(r));
-                }
-            }
 
-            if errors.len() > 0
+        let mut errors = vec![];
+
+        let duplicates = utils::find_duplicates(self.entries.iter().map(|e| e.id()))
+            .map(|d| ModuleValidationError::EntryIdDuplicate { id: d })
+            .collect_vec();
+
+        errors.extend(duplicates);
+
+        for id in self.entries.iter().map(|r| r.collect_ref_ids().into_iter()).flatten()
+        {
+            if let Err(error) = context.validate_ref_id(&id)
             {
-                Err(errors)
+                errors.push(ModuleValidationError::RefIdError { id, error });
             }
-            else 
-            {
-                Ok(())    
-            }
+        }
+
+        let html_errors = self.entries.iter()
+            .filter_map(|e| e.note())
+            .filter_map(|n| n.validate(&context).err())
+            .flatten()
+            .map(|e| ModuleValidationError::HtmlError { error: e })
+            .collect_vec();
+
+        let config_errors = self.config.description.as_ref().iter()
+            .flat_map(|d| d.validate(&context).err())
+            .flatten()
+            .map(|error| ModuleValidationError::HtmlError { error })
+            .collect_vec();
+
+        
+        errors.extend(config_errors);
+        errors.extend(html_errors);
+
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(())    
         }
     }
 }

@@ -22,9 +22,10 @@ pub mod parse;
 pub mod ast;
 
 use std::{collections::HashMap, fmt, ops::Deref, str::FromStr};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::html_text::{ast::{AssetIdName, Block}, lex::Lexer, parse::{ParseError, Parser}};
+use crate::{core::RefId, html_text::{ast::{AssetIdName, Block, HRefSrc, Inline}, lex::Lexer, parse::{ParseError, Parser}}, modules::EntryId, validation::{RefIdValidationError, ValidationContext}};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct HtmlText(Vec<Block>);
@@ -53,6 +54,22 @@ impl HtmlText
         
         let mut p = Parser::new(tokens);
         p.parse()
+    }
+
+    pub fn validate(&self, context: &ValidationContext) -> Result<(), Vec<HtmlValidationError>>
+    {
+        let errors = self.iter()
+            .filter_map(|b| HtmlValidator::visit_block(b, context).err())
+            .collect_vec();
+
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(())    
+        }
     }
 }
 
@@ -92,6 +109,98 @@ impl<'de> Deserialize<'de> for HtmlText
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
+
+#[derive(Debug, Clone)]
+pub enum HtmlValidationError
+{
+    InvalidRefId
+    {
+        id: RefId,
+        error: RefIdValidationError
+    },
+    InvalidModuleAlias
+    {
+        alias: AssetIdName,
+    },
+    EntryIdDoesNotExist
+    {
+        module_name: String,
+        entry_id: EntryId,
+    }
+}
+
+impl std::fmt::Display for HtmlValidationError
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result 
+    {
+        match self 
+        {
+            Self::InvalidRefId { id, error } => match error {
+                RefIdValidationError::DoesNotExist => write!(f, "RefId {} does not exist in bible in the current context", id),
+                RefIdValidationError::NeedsBible => write!(f, "RefId {} needs a bible reference", id),
+            },
+            Self::InvalidModuleAlias { alias } => write!(f, "Module alias '{}' either does not exist, or the module it references does not exist", alias),
+            Self::EntryIdDoesNotExist { module_name, entry_id } => write!(f, "Entry '{}' for module '{}' does not exist", entry_id, module_name),
+        }
+    }
+}
+
+struct HtmlValidator;
+
+impl HtmlValidator
+{
+    fn visit_block(block: &Block, context: &ValidationContext) -> Result<(), HtmlValidationError>
+    {
+        match block
+        {
+            Block::Paragraph(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
+            Block::Heading { level: _, content } => content.iter().map(|i| Self::visit_inline(i, context)).collect(),
+            Block::List { ordered: _, items } => items.iter().flatten().map(|i| Self::visit_inline(i, context)).collect(),
+            Block::HorizontalRule => Ok(()),
+        }
+    }
+
+    fn visit_inline(inline: &Inline, context: &ValidationContext) -> Result<(), HtmlValidationError>
+    {
+        match inline 
+        {
+            Inline::Text(_) => Ok(()),
+            Inline::Underline(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
+            Inline::Italic(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
+            Inline::Bold(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
+            Inline::Strike(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
+            Inline::Image { src: _, alt: _ } => Ok(()),
+            Inline::Anchor { href, content } => {
+                content.iter().map(|i| Self::visit_inline(i, context)).collect::<Result<Vec<_>, _>>()?;
+                match href
+                {
+                    HRefSrc::RefId(id) => context.validate_ref_id(id).map_err(|error| HtmlValidationError::InvalidRefId { id: id.clone(), error }),
+                    HRefSrc::Strongs(_) => Ok(()),
+                    HRefSrc::ModuleRef { module_alias, entry_id } => {
+                        let Some(module_name) = context.external.aliases.get(module_alias) else {
+                            return Err(HtmlValidationError::InvalidModuleAlias { alias: module_alias.clone() })
+                        };
+
+                        let Some(module) = context.all_modules.get(module_name) else {
+                            return Err(HtmlValidationError::InvalidModuleAlias { alias: module_alias.clone() })
+                        };
+
+                        if !module.has_entry(*entry_id)
+                        {
+                            return Err(HtmlValidationError::EntryIdDoesNotExist { module_name: module_name.clone(), entry_id: *entry_id })
+                        }
+                        else 
+                        {
+                            Ok(())    
+                        }
+                    },
+                }
+            },
+            Inline::LineBreak => Ok(()),
+        }
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

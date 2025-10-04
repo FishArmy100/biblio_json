@@ -1,9 +1,10 @@
 use std::{collections::HashMap, fmt::Display, num::NonZeroU32, str::FromStr};
 
+use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{core::{RefId, StrongsNumber, VerseId, WordRange, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationContext, ModuleValidationError}, utils};
+use crate::{core::{RefId, StrongsNumber, VerseId, WordRange, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, ValidationContext}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -59,12 +60,16 @@ impl StrongsLinksModule
         }
     }
 
-    pub fn validate(&self, context: &ModuleValidationContext) -> Result<(), Vec<ModuleValidationError>>
+    pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
+        let context = builder.build(Some(&self.config.bible), &self.config.external);
+
         let bible_name = &self.config.bible;
-        let Some(bible) = context.bibles.get(bible_name) else
+        let Some(_) = context.bibles.get(bible_name) else
         {
-            return Err(vec![ModuleValidationError::BibleNotFound(bible_name.clone())])
+            return Err(vec![ModuleValidationError::BibleNotFound {
+                name: bible_name.clone(),
+            }])
         };
 
         let mut all_refs = vec![];
@@ -85,14 +90,28 @@ impl StrongsLinksModule
             }
         }
 
+        let duplicate_errors = utils::find_duplicates(self.entries.iter().map(|e| e.id))
+            .map(|d| ModuleValidationError::EntryIdDuplicate { id: d })
+            .collect_vec();
+
+        let config_errors = self.config.description.as_ref().iter()
+            .flat_map(|d| d.validate(&context).err())
+            .flatten()
+            .map(|error| ModuleValidationError::HtmlError { error })
+            .collect_vec();
+
+        let ref_id_errors = all_refs.iter()
+            .filter_map(|id| match context.validate_ref_id(id) {
+                Ok(()) => None,
+                Err(e) => Some((e, id))
+            })
+            .map(|(e, id)| ModuleValidationError::RefIdError { id: id.clone(), error: e })
+            .collect_vec();
+
         let mut errors = vec![];
-        for r in all_refs
-        {
-            if !bible.source.id_exists(&r)
-            {
-                errors.push(ModuleValidationError::RefIdDoesNotExist(r, bible_name.clone()));
-            }
-        }
+        errors.extend(config_errors);
+        errors.extend(ref_id_errors);
+        errors.extend(duplicate_errors);
 
         if errors.len() > 0
         {

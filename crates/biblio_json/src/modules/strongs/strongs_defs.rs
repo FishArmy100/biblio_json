@@ -1,8 +1,9 @@
 use std::collections::HashMap;
 
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{lang::Language, strongs_number::StrongsNumber}, html_text::HtmlText, modules::{EntryId, ExternalModuleData}, utils};
+use crate::{core::{lang::Language, strongs_number::StrongsNumber}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -65,6 +66,51 @@ impl StrongsDefsModule
         {
             Some(idx) => Some(&self.entries[*idx as usize]),
             None => None
+        }
+    }
+
+    pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
+    {
+        let context = builder.build(None, &self.config.external);
+
+        let duplicate_errors = utils::find_duplicates(self.entries.iter().map(|e| e.id))
+            .map(|d| ModuleValidationError::EntryIdDuplicate { id: d })
+            .collect_vec();
+
+        let config_errors = self.config.description.as_ref().iter()
+            .flat_map(|d| d.validate(&context).err())
+            .flatten()
+            .map(|error| ModuleValidationError::HtmlError { error })
+            .collect_vec();
+
+        let entry_errors = self.entries.iter().map(|e| {
+            let mut errors = e.definitions.iter().filter_map(|d| d.validate(&context).err()).flatten().collect_vec();
+            if let Some(derivation) = &e.derivation
+            {
+                if let Some(e) = derivation.validate(&context).err()
+                {
+                    errors.extend(e);
+                }
+            }
+            
+            errors
+        })
+        .flatten()
+        .map(|e| ModuleValidationError::HtmlError { error: e })
+        .collect_vec();
+
+        let mut errors = vec![];
+        errors.extend(config_errors);
+        errors.extend(entry_errors);
+        errors.extend(duplicate_errors);
+
+        if errors.len() > 0
+        {
+            Err(errors)
+        }
+        else 
+        {
+            Ok(())    
         }
     }
 }

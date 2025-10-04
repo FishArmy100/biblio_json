@@ -2,12 +2,13 @@ pub(crate) mod utils;
 pub mod modules;
 pub mod core;
 pub mod html_text;
+pub mod validation;
 use std::{collections::HashMap, fmt::Display, num::NonZeroU32, path::Path, sync::Arc};
 use flate2::Compression;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationContext, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::XRefModule}};
+use crate::{core::{RefId, StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, notebook::NotebookModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::XRefModule}, validation::{ValidationContext, ValidationContextBuilder}};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -36,6 +37,7 @@ pub struct ModulePaths
     pub strongs_defs: Option<String>,
     pub strongs_links: Option<String>,
     pub commentaries: Option<String>,
+    pub notebooks: Option<String>,
 }
 
 #[derive(Debug)]
@@ -360,17 +362,8 @@ impl Package
     pub fn fetch_entry<'a>(&'a self, entry_ref: ModuleEntryRef) -> Option<ModuleEntry<'a>>
     {
         let module = self.get_mod(&entry_ref.module)?;
-        let module_entry = match module 
-        {
-            Module::Bible(bible) => ModuleEntry::Verse(bible.source.verses.values().find(|v| v.id == entry_ref.entry_id)?),
-            Module::Dictionary(dict) => ModuleEntry::Dictionary(dict.entries.iter().find(|e| e.id == entry_ref.entry_id)?),
-            Module::XRef(xref) => ModuleEntry::XRef(xref.entries.iter().find(|e| e.id() == entry_ref.entry_id)?),
-            Module::StrongsDefs(strongs_defs) => ModuleEntry::StrongsDef(strongs_defs.entries.iter().find(|e| e.id == entry_ref.entry_id)?),
-            Module::StrongsLinks(strongs_links) => ModuleEntry::StrongsLink(strongs_links.entries.iter().find(|e| e.id == entry_ref.entry_id)?),
-            Module::Commentary(commentary) => ModuleEntry::Commentary(commentary.entries.iter().find(|e| e.id == entry_ref.entry_id)?),
-        };
-
-        Some(module_entry)
+        let entry = module.get_entry(entry_ref.entry_id)?;
+        Some(entry)
     }
 
     pub fn to_binary(&self) -> Result<Vec<u8>, String>
@@ -418,14 +411,19 @@ impl Package
             _ => None,
         }).map(|b| (b.config.name.clone(), b)).collect::<HashMap<_, _>>();
 
-        let context = ModuleValidationContext {
-            bibles: &bibles
+        let all_modules = modules.iter()
+            .map(|m| (m.name().to_string(), m.clone()))
+            .collect::<HashMap<_, _>>();
+
+        let builder = ValidationContextBuilder {
+            bibles: &bibles,
+            all_modules: &all_modules,
         };
 
         let mut errors = vec![];
         for m in modules
         {
-            if let Err(errs) = m.validate(&context)
+            if let Err(errs) = m.validate(&builder)
             {
                 errors.extend(errs.into_iter().map(|error| PackageLoadError::ModuleValidationError { 
                     name: m.name().to_string(), 
@@ -521,6 +519,19 @@ impl Package
         {
             let result = Self::load_module(root, commentaries, |dir, name| {
                 Ok(Module::Commentary(Arc::new(CommentaryModule::load_json(dir, name)?)))
+            });
+
+            match result 
+            {
+                Ok(ok) => modules.extend(ok),
+                Err(e) => errors.push(e),
+            }
+        }
+
+        if let Some(notebooks) = &paths.notebooks
+        {
+            let result = Self::load_module(root, notebooks, |dir, name| {
+                Ok(Module::Notebook(Arc::new(NotebookModule::load_json(dir, name)?)))
             });
 
             match result 
