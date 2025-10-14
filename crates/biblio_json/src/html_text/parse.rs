@@ -150,31 +150,53 @@ impl Parser
         {
             Some(Token::OpenTag { tag, attrs: _ }) if tag == "ul" => (false, "ul".to_string()),
             Some(Token::OpenTag { tag, attrs: _ }) if tag == "ol" => (true, "ol".to_string()),
-            other => return Err(ParseError { kind: ErrorKind::UnexpectedToken(format!("expected <ul> or <ol>, found {:?}", other)), pos: start_pos }),
+            other => {
+                return Err(ParseError {
+                    kind: ErrorKind::UnexpectedToken(format!(
+                        "expected <ul> or <ol>, found {:?}",
+                        other
+                    )),
+                    pos: start_pos,
+                })
+            }
         };
 
         let mut items = Vec::new();
+
         loop 
         {
             match self.peek() 
             {
-                Some(Token::OpenTag { tag, attrs: _ }) if tag == "li" => 
-                {
-                    self.next();
-                    let inlines = self.parse_inlines_until("li")?;
-                    items.push(inlines);
+                Some(Token::OpenTag { tag, attrs: _ }) if tag == "li" => {
+                    self.next(); // consume <li>
+                    let blocks = self.parse_blocks_until("li")?;
+                    items.push(blocks);
                 }
-                Some(Token::CloseTag(n)) if n == &tag => { self.next(); break; }
-                Some(Token::Text(t)) if t.trim().is_empty() => { self.next(); }
-                Some(tok) => return Err(ParseError { 
-                    kind: ErrorKind::InvalidNesting(format!("unexpected in <{}>: {:?}", tag, tok)), pos: self.pos 
-                }),
-                None => return Err(ParseError { 
-                    kind: ErrorKind::UnexpectedEOF, 
-                    pos: self.pos 
-                }),
+                Some(Token::CloseTag(n)) if n == &tag => {
+                    self.next(); // consume </ul> or </ol>
+                    break;
+                }
+                Some(Token::Text(t)) if t.trim().is_empty() => {
+                    self.next(); // skip whitespace
+                }
+                Some(tok) => {
+                    return Err(ParseError {
+                        kind: ErrorKind::InvalidNesting(format!(
+                            "unexpected in <{}>: {:?}",
+                            tag, tok
+                        )),
+                        pos: self.pos,
+                    })
+                }
+                None => {
+                    return Err(ParseError {
+                        kind: ErrorKind::UnexpectedEOF,
+                        pos: self.pos,
+                    })
+                }
             }
         }
+
         Ok(Block::List { ordered, items })
     }
 
@@ -248,5 +270,67 @@ impl Parser
             }
         }
         Ok(v)
+    }
+
+    fn parse_blocks_until(&mut self, closing: &str) -> Result<Vec<Block>, ParseError> 
+    {
+        let mut blocks = Vec::new();
+
+        loop 
+        {
+            match self.peek() 
+            {
+                Some(Token::CloseTag(n)) if n == closing => {
+                    self.next(); // consume </closing>
+                    break;
+                }
+                Some(Token::OpenTag { tag, .. }) => match tag.as_str() {
+                    "p" => blocks.push(self.parse_paragraph()?),
+                    "ul" | "ol" => blocks.push(self.parse_list()?),
+                    n if n.starts_with('h') && n.len() == 2 && n.chars().nth(1).unwrap().is_ascii_digit() => {
+                        blocks.push(self.parse_heading()?);
+                    }
+                    "li" => {
+                        return Err(ParseError {
+                            kind: ErrorKind::InvalidNesting(
+                                "nested <li> not allowed directly".into(),
+                            ),
+                            pos: self.pos,
+                        })
+                    }
+                    other => {
+                        return Err(ParseError {
+                            kind: ErrorKind::UnsupportedTag(other.to_string()),
+                            pos: self.pos,
+                        })
+                    }
+                },
+                Some(Token::Text(t)) => {
+                    if t.trim().is_empty() {
+                        self.next(); // skip whitespace text nodes
+                    } else {
+                        blocks.push(self.parse_paragraph()?);
+                    }
+                }
+                Some(Token::SelfClose { tag, .. }) if tag == "hr" => {
+                    self.next();
+                    blocks.push(Block::HorizontalRule);
+                }
+                None => {
+                    return Err(ParseError {
+                        kind: ErrorKind::UnexpectedEOF,
+                        pos: self.pos,
+                    })
+                }
+                _ => {
+                    return Err(ParseError {
+                        kind: ErrorKind::UnexpectedToken(format!("unexpected token in <{}>", closing)),
+                        pos: self.pos,
+                    })
+                }
+            }
+        }
+
+        Ok(blocks)
     }
 }

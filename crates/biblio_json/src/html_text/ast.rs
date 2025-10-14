@@ -17,7 +17,7 @@ pub enum Block
 {
     Paragraph(Vec<Inline>),
     Heading { level: u8, content: Vec<Inline> },
-    List { ordered: bool, items: Vec<Vec<Inline>> },
+    List { ordered: bool, items: Vec<Vec<Block>> },
     HorizontalRule,
 }
 
@@ -31,7 +31,7 @@ impl Block
             Block::Heading { level, content } => format!("<h{l}>{}</h{l}>", content.iter().map(Inline::to_html).join(""), l = level),
             Block::List { ordered, items } => {
                 let tag = if *ordered { "ol" } else { "ul" };
-                let body = items.iter().map(|it| format!("<li>{}</li>", it.iter().map(Inline::to_html).join(""))).collect::<String>();
+                let body = items.iter().map(|it| format!("<li>{}</li>", it.iter().map(Block::to_html).join(""))).collect::<String>();
                 format!("<{t}>{b}</{t}>", t = tag, b = body)
             }
             Block::HorizontalRule => "<hr>".to_string(),

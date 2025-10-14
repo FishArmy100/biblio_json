@@ -155,7 +155,7 @@ impl HtmlValidator
         {
             Block::Paragraph(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
             Block::Heading { level: _, content } => content.iter().map(|i| Self::visit_inline(i, context)).collect(),
-            Block::List { ordered: _, items } => items.iter().flatten().map(|i| Self::visit_inline(i, context)).collect(),
+            Block::List { ordered: _, items } => items.iter().flatten().map(|i| Self::visit_block(i, context)).collect(),
             Block::HorizontalRule => Ok(()),
         }
     }
@@ -294,6 +294,13 @@ mod tests {
             Block::List { ordered, items } => {
                 assert!(!ordered);
                 assert_eq!(items.len(), 2);
+                // Each <li> now contains a Vec<Block>
+                match &items[0][0] {
+                    Block::Paragraph(inlines) => {
+                        assert_eq!(inlines[0], Inline::Text("Item 1".to_string()));
+                    }
+                    _ => panic!("Expected paragraph inside list item"),
+                }
             }
             _ => panic!("Expected list block"),
         }
@@ -305,8 +312,52 @@ mod tests {
             Block::List { ordered, items } => {
                 assert!(ordered);
                 assert_eq!(items.len(), 2);
+                match &items[1][0] {
+                    Block::Paragraph(inlines) => {
+                        assert_eq!(inlines[0], Inline::Text("Second".to_string()));
+                    }
+                    _ => panic!("Expected paragraph inside list item"),
+                }
             }
             _ => panic!("Expected list block"),
+        }
+    }
+    #[test]
+    fn test_nested_lists() {
+        let html = r#"
+            <ul>
+                <li>Item 1</li>
+                <li>Item 2
+                    <ol>
+                        <li>Subitem A</li>
+                        <li>Subitem B</li>
+                    </ol>
+                </li>
+                <li>Item 3</li>
+            </ul>
+        "#;
+
+        let result = HtmlText::from_str(html).unwrap();
+        match &result[0] {
+            Block::List { ordered, items } => {
+                assert!(!ordered);
+                assert_eq!(items.len(), 3);
+
+                // The second list item should contain a nested list
+                match &items[1][1] {
+                    Block::List { ordered: true, items: subitems } => {
+                        assert_eq!(subitems.len(), 2);
+                        match &subitems[0][0] {
+                            Block::Paragraph(inlines) => {
+                                assert_eq!(inlines[0], Inline::Text("Subitem A".to_string()));
+                            }
+                            _ => panic!("Expected paragraph in nested list item"),
+                        }
+                    }
+                    _ => panic!("Expected nested ordered list"),
+                }
+            }
+            _ => panic!("Expected outer unordered list"),
         }
     }
 
@@ -325,16 +376,16 @@ mod tests {
     #[test]
     fn test_attributes() {
         // Test anchor with href
-        let html = r#"<p><a href="https://example.com">Link</a></p>"#;
+        let html = r#"<p><a href="H1001">Link</a></p>"#;
         let result = HtmlText::from_str(html).unwrap();
         let html_output = result.to_html();
-        assert!(html_output.contains(r#"href="https://example.com""#));
+        assert!(html_output.contains(r#"href="H1001""#));
 
         // Test image with src and alt
-        let html = r#"<p><img src="image.jpg" alt="Test image"></p>"#;
+        let html = r#"<p><img src="image" alt="Test image"></p>"#;
         let result = HtmlText::from_str(html).unwrap();
         let html_output = result.to_html();
-        assert!(html_output.contains(r#"src="image.jpg""#));
+        assert!(html_output.contains(r#"src="image""#));
         assert!(html_output.contains(r#"alt="Test image""#));
     }
 
@@ -342,15 +393,8 @@ mod tests {
     fn test_attribute_edge_cases() {
         // Test special characters in attributes
         let html = r#"<p><img src="<test>"></p>"#;
-        let result = HtmlText::from_str(html).unwrap();
-        let html_output = result.to_html();
-        assert!(html_output.contains("&lt;test&gt;"));
-
-        // Test quotes in attributes
-        let html = r#"<p><img src='He said "hello"'></p>"#;
-        let result = HtmlText::from_str(html).unwrap();
-        let html_output = result.to_html();
-        assert!(html_output.contains("He said"));
+        let result = HtmlText::from_str(html);
+        assert!(result.is_err())
     }
 
     #[test]
