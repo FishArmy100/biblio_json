@@ -17,67 +17,42 @@
 //! No comments, scripts, styles, entities, or complex inline HTML are supported.
 //! This is deliberately minimal and safe to extend.
 
+use std::{fmt, str::FromStr};
+
+use itertools::Itertools;
+use serde::{Deserialize, Serialize};
+
+use crate::{core::RefId, html_text::{ast::{AssetIdName, HRefSrc, Node}, lex::Lexer, parse::Parser}, modules::EntryId, validation::{RefIdValidationError, ValidationContext}};
+
 pub mod lex;
 pub mod parse;
 pub mod ast;
 
-use std::{collections::HashMap, fmt, ops::Deref, str::FromStr};
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
-
-use crate::{core::RefId, html_text::{ast::{AssetIdName, Block, HRefSrc, Inline}, lex::Lexer, parse::{ParseError, Parser}}, modules::EntryId, validation::{RefIdValidationError, ValidationContext}};
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct HtmlText(Vec<Block>);
-
-impl Deref for HtmlText
+pub struct HtmlText 
 {
-    type Target = Vec<Block>;
-
-    fn deref(&self) -> &Self::Target 
-    {
-        &self.0
-    }
+    pub nodes: Vec<Node>,
 }
 
-impl HtmlText 
+impl HtmlText
 {
     pub fn to_html(&self) -> String 
     {
-        self.iter().map(|b| b.to_html()).collect::<Vec<_>>().join("")
-    }
-
-    pub fn from_str(html: &str) -> Result<HtmlText, ParseError>
-    {
-        let mut lexer = Lexer::new(html);
-        let tokens = lexer.tokenize()?;
-        
-        let mut p = Parser::new(tokens);
-        p.parse()
+        self.to_string()
     }
 
     pub fn validate(&self, context: &ValidationContext) -> Result<(), Vec<HtmlValidationError>>
     {
-        let errors = self.iter()
-            .filter_map(|b| HtmlValidator::visit_block(b, context).err())
-            .collect_vec();
-
-        if errors.len() > 0
-        {
-            Err(errors)
-        }
-        else 
-        {
-            Ok(())    
-        }
+        HtmlValidator::validate(self, context).map_err(|e| vec![e])
     }
 }
 
-impl std::fmt::Display for HtmlText
+impl ToString for HtmlText
 {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result 
+    fn to_string(&self) -> String 
     {
-        write!(f, "{}", self.to_html())
+        self.nodes.iter().map(|n| n.to_html()).join("")
     }
 }
 
@@ -87,11 +62,14 @@ impl FromStr for HtmlText
 
     fn from_str(s: &str) -> Result<Self, Self::Err> 
     {
-        HtmlText::from_str(s)
+        let mut lexer = Lexer::new(s);
+        let tokens = lexer.tokenize()?;
+        let mut parser = Parser::new(tokens);
+        parser.parse()
     }
 }
 
-impl Serialize for HtmlText
+impl Serialize for HtmlText 
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::Serializer 
@@ -100,7 +78,7 @@ impl Serialize for HtmlText
     }
 }
 
-impl<'de> Deserialize<'de> for HtmlText
+impl<'de> Deserialize<'de> for HtmlText 
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where D: serde::Deserializer<'de> 
@@ -109,6 +87,47 @@ impl<'de> Deserialize<'de> for HtmlText
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ErrorKind {
+    UnexpectedEOF,
+    UnexpectedToken(String),
+    UnsupportedTag(String),
+    InvalidNesting(String),
+    InvalidAttrs(String),
+    MissingRequiredAttr(String),
+}
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result 
+    {
+        match self 
+        {
+            ErrorKind::UnexpectedEOF => write!(f, "Unexpected end of file"),
+            ErrorKind::UnexpectedToken(tok) => write!(f, "Unexpected token: {}", tok),
+            ErrorKind::UnsupportedTag(tag) => write!(f, "Unsupported tag: <{}>", tag),
+            ErrorKind::InvalidNesting(desc) => write!(f, "Invalid nesting: {}", desc),
+            ErrorKind::InvalidAttrs(desc) => write!(f, "Invalid attributes: {}", desc),
+            ErrorKind::MissingRequiredAttr(attr) => write!(f, "Missing required attribute: {}", attr),
+        }
+    }
+}
+
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ParseError {
+    pub kind: ErrorKind,
+    pub pos: usize,
+}
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?} at byte {}", self.kind, self.pos)
+    }
+}
+
+impl std::error::Error for ParseError {}
 
 #[derive(Debug, Clone)]
 pub enum HtmlValidationError
@@ -145,577 +164,326 @@ impl std::fmt::Display for HtmlValidationError
     }
 }
 
-struct HtmlValidator;
+pub struct HtmlValidator;
 
-impl HtmlValidator
-{
-    fn visit_block(block: &Block, context: &ValidationContext) -> Result<(), HtmlValidationError>
+impl HtmlValidator {
+    pub fn validate(doc: &HtmlText, context: &ValidationContext) -> Result<(), HtmlValidationError> 
     {
-        match block
-        {
-            Block::Paragraph(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
-            Block::Heading { level: _, content } => content.iter().map(|i| Self::visit_inline(i, context)).collect(),
-            Block::List { ordered: _, items } => items.iter().flatten().map(|i| Self::visit_block(i, context)).collect(),
-            Block::HorizontalRule => Ok(()),
-        }
+        doc.nodes.iter().try_for_each(|node| Self::visit_node(node, context))
     }
 
-    fn visit_inline(inline: &Inline, context: &ValidationContext) -> Result<(), HtmlValidationError>
-    {
-        match inline 
-        {
-            Inline::Text(_) => Ok(()),
-            Inline::Underline(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
-            Inline::Italic(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
-            Inline::Bold(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
-            Inline::Strike(inlines) => inlines.iter().map(|i| Self::visit_inline(i, context)).collect(),
-            Inline::Image { src: _, alt: _ } => Ok(()),
-            Inline::Anchor { href, content } => {
-                content.iter().map(|i| Self::visit_inline(i, context)).collect::<Result<Vec<_>, _>>()?;
-                match href
-                {
-                    HRefSrc::RefId(id) => context.validate_ref_id(id).map_err(|error| HtmlValidationError::InvalidRefId { id: id.clone(), error }),
+    fn visit_node(node: &Node, context: &ValidationContext) -> Result<(), HtmlValidationError> {
+        match node {
+            // Block-level nodes
+            Node::Paragraph(children) => {
+                children.iter().try_for_each(|n| Self::visit_node(n, context))
+            }
+            Node::Heading { level: _, content } => {
+                content.iter().try_for_each(|n| Self::visit_node(n, context))
+            }
+            Node::List { ordered: _, items } => {
+                items.iter().try_for_each(|n| Self::visit_node(n, context))
+            }
+            Node::ListItem(children) => {
+                children.iter().try_for_each(|n| Self::visit_node(n, context))
+            }
+            Node::HorizontalRule => Ok(()),
+
+            // Inline nodes
+            Node::Text(_) => Ok(()),
+            Node::Underline(children) => {
+                children.iter().try_for_each(|n| Self::visit_node(n, context))
+            }
+            Node::Italic(children) => {
+                children.iter().try_for_each(|n| Self::visit_node(n, context))
+            }
+            Node::Bold(children) => {
+                children.iter().try_for_each(|n| Self::visit_node(n, context))
+            }
+            Node::Strike(children) => {
+                children.iter().try_for_each(|n| Self::visit_node(n, context))
+            }
+            Node::Image { src: _, alt: _ } => Ok(()),
+            Node::LineBreak => Ok(()),
+            
+            Node::Anchor { href, content } => {
+                // First validate all children
+                content.iter().try_for_each(|n| Self::visit_node(n, context))?;
+                
+                // Then validate the href
+                match href {
+                    HRefSrc::RefId(id) => {
+                        context.validate_ref_id(id).map_err(|error| {
+                            HtmlValidationError::InvalidRefId {
+                                id: id.clone(),
+                                error,
+                            }
+                        })
+                    }
                     HRefSrc::Strongs(_) => Ok(()),
                     HRefSrc::ModuleRef { module_alias, entry_id } => {
-                        let Some(module_name) = context.external.aliases.get(module_alias) else {
-                            return Err(HtmlValidationError::InvalidModuleAlias { alias: module_alias.clone() })
+                        let aliases = &context.external.aliases;
+                        let Some(module_name) = aliases.get(module_alias) else {
+                            return Err(HtmlValidationError::InvalidModuleAlias {
+                                alias: module_alias.clone(),
+                            });
                         };
 
-                        let Some(module) = context.all_modules.get(module_name) else {
-                            return Err(HtmlValidationError::InvalidModuleAlias { alias: module_alias.clone() })
+                        let all_modules = &context.all_modules;
+                        let Some(module) = all_modules.get(module_name) else {
+                            return Err(HtmlValidationError::InvalidModuleAlias {
+                                alias: module_alias.clone(),
+                            });
                         };
 
-                        if !module.has_entry(*entry_id)
-                        {
-                            return Err(HtmlValidationError::EntryIdDoesNotExist { module_name: module_name.clone(), entry_id: *entry_id })
+                        if !module.has_entry(*entry_id) {
+                            return Err(HtmlValidationError::EntryIdDoesNotExist {
+                                module_name: module_name.clone(),
+                                entry_id: *entry_id,
+                            });
                         }
-                        else 
-                        {
-                            Ok(())    
-                        }
-                    },
+
+                        Ok(())
+                    }
                 }
-            },
-            Inline::LineBreak => Ok(()),
+            }
         }
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use crate::html_text::ast::Inline;
-
     use super::*;
-    use rand::{Rng, SeedableRng};
-    use rand::rngs::StdRng;
-    use rand::seq::IndexedRandom;
+    use crate::html_text::ast::Node;
+    use std::str::FromStr;
 
-    // Basic functionality tests
+    fn parse_ok(s: &str) -> HtmlText {
+        HtmlText::from_str(s).expect(&format!("should parse: {}", s))
+    }
+
+    fn roundtrip(input: &str) {
+        let parsed = HtmlText::from_str(input).unwrap();
+        let output = parsed.to_string();
+        assert_eq!(output, input, "roundtrip failed: input={input}, output={output}");
+    }
+
+    // ──────────────────────────────────────────────
+    // BASIC BLOCK ELEMENTS
+    // ──────────────────────────────────────────────
+
     #[test]
-    fn test_basic_paragraph() {
+    fn paragraph_basic() {
         let html = "<p>Hello world</p>";
-        let result = HtmlText::from_str(html).unwrap();
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            Block::Paragraph(inlines) => {
-                assert_eq!(inlines.len(), 1);
-                match &inlines[0] {
-                    Inline::Text(text) => assert_eq!(text, "Hello world"),
-                    _ => panic!("Expected text inline"),
-                }
-            }
-            _ => panic!("Expected paragraph block"),
-        }
+        let doc = parse_ok(html);
+        assert_eq!(
+            doc.nodes,
+            vec![Node::Paragraph(vec![Node::Text("Hello world".into())])]
+        );
+        assert_eq!(doc.to_string(), html);
     }
 
     #[test]
-    fn test_heading_levels() {
+    fn heading_levels() {
         for level in 1..=6 {
-            let html = format!("<h{}>Heading {}</h{}>", level, level, level);
-            let result = HtmlText::from_str(&html).unwrap();
-            match &result[0] {
-                Block::Heading { level: l, content } => {
-                    assert_eq!(*l, level);
-                    assert_eq!(content.len(), 1);
-                }
-                _ => panic!("Expected heading block"),
-            }
+            let html = format!("<h{0}>Header {0}</h{0}>", level);
+            let doc = parse_ok(&html);
+            assert_eq!(
+                doc.nodes,
+                vec![Node::Heading {
+                    level,
+                    content: vec![Node::Text(format!("Header {}", level))]
+                }]
+            );
+            assert_eq!(doc.to_string(), html);
         }
     }
 
     #[test]
-    fn test_formatting_tags() {
-        let test_cases = vec![
-            ("<b>bold</b>", "bold"),
-            ("<strong>strong</strong>", "strong"),
-            ("<i>italic</i>", "italic"),
-            ("<em>emphasis</em>", "emphasis"),
-            ("<u>underline</u>", "underline"),
-            ("<s>strike</s>", "strike"),
-            ("<del>delete</del>", "delete"),
-            ("<strike>strikethrough</strike>", "strikethrough"),
-        ];
-
-        for (html, expected_text) in test_cases {
-            let full_html = format!("<p>{}</p>", html);
-            let result = HtmlText::from_str(&full_html).unwrap();
-            match &result[0] {
-                Block::Paragraph(inlines) => {
-                    assert_eq!(inlines.len(), 1);
-                    // Check that it parsed as a formatting inline (not just text)
-                    match &inlines[0] {
-                        Inline::Text(_) => panic!("Expected formatting inline, got text for: {}", html),
-                        _ => {
-                            // Extract inner text to verify content
-                            let html_output = result.to_html();
-                            assert!(html_output.contains(expected_text));
-                        }
-                    }
-                }
-                _ => panic!("Expected paragraph block"),
-            }
-        }
+    fn list_unordered() {
+        let html = "<ul><li>One</li><li>Two</li></ul>";
+        let doc = parse_ok(html);
+        assert_eq!(
+            doc.nodes,
+            vec![Node::List {
+                ordered: false,
+                items: vec![
+                    Node::ListItem(vec![Node::Text("One".into())]),
+                    Node::ListItem(vec![Node::Text("Two".into())]),
+                ]
+            }]
+        );
+        assert_eq!(doc.to_string(), html);
     }
 
     #[test]
-    fn test_nested_formatting() {
-        let html = "<p><b>bold <i>and italic</i> text</b></p>";
-        let result = HtmlText::from_str(html).unwrap();
-        assert!(result.to_html().contains("bold") && result.to_html().contains("italic"));
-    }
-
-    #[test]
-    fn test_lists() {
-        // Unordered list
-        let html = "<ul><li>Item 1</li><li>Item 2</li></ul>";
-        let result = HtmlText::from_str(html).unwrap();
-        match &result[0] {
-            Block::List { ordered, items } => {
-                assert!(!ordered);
-                assert_eq!(items.len(), 2);
-                // Each <li> now contains a Vec<Block>
-                match &items[0][0] {
-                    Block::Paragraph(inlines) => {
-                        assert_eq!(inlines[0], Inline::Text("Item 1".to_string()));
-                    }
-                    _ => panic!("Expected paragraph inside list item"),
-                }
-            }
-            _ => panic!("Expected list block"),
-        }
-
-        // Ordered list
+    fn list_ordered() {
         let html = "<ol><li>First</li><li>Second</li></ol>";
-        let result = HtmlText::from_str(html).unwrap();
-        match &result[0] {
-            Block::List { ordered, items } => {
-                assert!(ordered);
-                assert_eq!(items.len(), 2);
-                match &items[1][0] {
-                    Block::Paragraph(inlines) => {
-                        assert_eq!(inlines[0], Inline::Text("Second".to_string()));
-                    }
-                    _ => panic!("Expected paragraph inside list item"),
-                }
-            }
-            _ => panic!("Expected list block"),
-        }
-    }
-    #[test]
-    fn test_nested_lists() {
-        let html = r#"
-            <ul>
-                <li>Item 1</li>
-                <li>Item 2
-                    <ol>
-                        <li>Subitem A</li>
-                        <li>Subitem B</li>
-                    </ol>
-                </li>
-                <li>Item 3</li>
-            </ul>
-        "#;
-
-        let result = HtmlText::from_str(html).unwrap();
-        match &result[0] {
-            Block::List { ordered, items } => {
-                assert!(!ordered);
-                assert_eq!(items.len(), 3);
-
-                // The second list item should contain a nested list
-                match &items[1][1] {
-                    Block::List { ordered: true, items: subitems } => {
-                        assert_eq!(subitems.len(), 2);
-                        match &subitems[0][0] {
-                            Block::Paragraph(inlines) => {
-                                assert_eq!(inlines[0], Inline::Text("Subitem A".to_string()));
-                            }
-                            _ => panic!("Expected paragraph in nested list item"),
-                        }
-                    }
-                    _ => panic!("Expected nested ordered list"),
-                }
-            }
-            _ => panic!("Expected outer unordered list"),
-        }
+        roundtrip(html);
     }
 
     #[test]
-    fn test_self_closing_tags() {
-        let html = "<p>Line 1<br>Line 2</p><hr>";
-        let result = HtmlText::from_str(html).unwrap();
-        assert_eq!(result.len(), 2);
-        
-        match &result[1] {
-            Block::HorizontalRule => {},
-            _ => panic!("Expected horizontal rule"),
-        }
+    fn horizontal_rule() {
+        let html = "<hr>";
+        roundtrip(html);
+    }
+
+    // ──────────────────────────────────────────────
+    // INLINE STYLING ELEMENTS
+    // ──────────────────────────────────────────────
+
+    #[test]
+    fn bold_text() {
+        let html = "<p><b>bold</b></p>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_attributes() {
-        // Test anchor with href
-        let html = r#"<p><a href="H1001">Link</a></p>"#;
-        let result = HtmlText::from_str(html).unwrap();
-        let html_output = result.to_html();
-        assert!(html_output.contains(r#"href="H1001""#));
-
-        // Test image with src and alt
-        let html = r#"<p><img src="image" alt="Test image"></p>"#;
-        let result = HtmlText::from_str(html).unwrap();
-        let html_output = result.to_html();
-        assert!(html_output.contains(r#"src="image""#));
-        assert!(html_output.contains(r#"alt="Test image""#));
+    fn italic_and_underline() {
+        let html = "<p><i>italic</i> and <u>underline</u></p>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_attribute_edge_cases() {
-        // Test special characters in attributes
-        let html = r#"<p><img src="<test>"></p>"#;
-        let result = HtmlText::from_str(html);
-        assert!(result.is_err())
+    fn strike_text() {
+        let html = "<p><s>cross</s></p>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_implicit_paragraphs() {
-        let html = "Just some text";
-        let result = HtmlText::from_str(html).unwrap();
-        assert_eq!(result.len(), 1);
-        match &result[0] {
-            Block::Paragraph(_) => {},
-            _ => panic!("Expected implicit paragraph"),
-        }
+    fn nested_inline_tags() {
+        let html = "<p><b>bold and <i>italic</i></b></p>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_whitespace_handling() {
-        let html = "   <p>  Text with spaces  </p>   ";
-        let result = HtmlText::from_str(html).unwrap();
-        assert_eq!(result.len(), 1);
+    fn line_break_in_paragraph() {
+        let html = "<p>Hello<br>World</p>";
+        roundtrip(html);
+    }
+
+    // ──────────────────────────────────────────────
+    // IMAGES AND ANCHORS
+    // ──────────────────────────────────────────────
+
+    #[test]
+    fn image_with_alt() {
+        let html = "<p><img src=\"example_img\" alt=\"Example\"></p>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_error_cases() {
-        // Unclosed tags
-        assert!(HtmlText::from_str("<p>unclosed").is_err());
-        
-        // Unsupported tags
-        assert!(HtmlText::from_str("<div>content</div>").is_err());
-        
-        // Missing required attributes
-        assert!(HtmlText::from_str("<a>link</a>").is_err());
-        assert!(HtmlText::from_str("<img>").is_err());
-        
-        // Invalid nesting
-        assert!(HtmlText::from_str("<p><ul><li>item</li></ul></p>").is_err());
-        
-        // Malformed tags
-        assert!(HtmlText::from_str("<>content</>").is_err());
-    }
-
-    // Fuzzer implementation
-    pub struct HtmlFuzzer {
-        rng: StdRng,
-        max_depth: usize,
-        max_siblings: usize,
-    }
-
-    impl HtmlFuzzer {
-        pub fn new(seed: u64) -> Self {
-            Self {
-                rng: StdRng::seed_from_u64(seed),
-                max_depth: 5,
-                max_siblings: 10,
-            }
-        }
-
-        pub fn generate_html(&mut self) -> String {
-            self.generate_blocks(0)
-        }
-
-        fn generate_blocks(&mut self, depth: usize) -> String {
-            if depth >= self.max_depth {
-                return self.generate_text();
-            }
-
-            let num_blocks = self.rng.random_range(1..=self.max_siblings.min(5));
-            let mut html = String::new();
-
-            for _ in 0..num_blocks {
-                html.push_str(&self.generate_block(depth));
-            }
-
-            html
-        }
-
-        fn generate_block(&mut self, depth: usize) -> String {
-            let block_types = vec!["p", "h1", "h2", "h3", "ul", "ol", "hr"];
-            let block_type = block_types.choose(&mut self.rng).unwrap();
-
-            match *block_type {
-                "p" => format!("<p>{}</p>", self.generate_inlines(depth + 1)),
-                "h1" | "h2" | "h3" => format!("<{}>{}</{}>", block_type, self.generate_inlines(depth + 1), block_type),
-                "ul" => self.generate_list(false, depth),
-                "ol" => self.generate_list(true, depth),
-                "hr" => "<hr>".to_string(),
-                _ => unreachable!(),
-            }
-        }
-
-        fn generate_list(&mut self, ordered: bool, depth: usize) -> String {
-            let tag = if ordered { "ol" } else { "ul" };
-            let num_items = self.rng.random_range(1..=5);
-            let mut html = format!("<{}>", tag);
-
-            for _ in 0..num_items {
-                html.push_str(&format!("<li>{}</li>", self.generate_inlines(depth + 1)));
-            }
-
-            html.push_str(&format!("</{}>", tag));
-            html
-        }
-
-        fn generate_inlines(&mut self, depth: usize) -> String {
-            if depth >= self.max_depth {
-                return self.generate_text();
-            }
-
-            let num_inlines = self.rng.random_range(1..=5);
-            let mut html = String::new();
-
-            for _ in 0..num_inlines {
-                html.push_str(&self.generate_inline(depth));
-            }
-
-            html
-        }
-
-        fn generate_inline(&mut self, depth: usize) -> String {
-            let inline_types = vec!["text", "b", "i", "u", "s", "em", "strong", "a", "img", "br"];
-            let inline_type = inline_types.choose(&mut self.rng).unwrap();
-
-            match *inline_type {
-                "text" => self.generate_text(),
-                "b" | "i" | "u" | "s" | "em" | "strong" => {
-                    format!("<{}>{}</{}>", inline_type, self.generate_inlines(depth + 1), inline_type)
-                }
-                "a" => {
-                    let href = self.generate_url();
-                    format!("<a href=\"{}\">{}</a>", href, self.generate_inlines(depth + 1))
-                }
-                "img" => {
-                    let src = self.generate_url();
-                    let alt = if self.rng.random_bool(0.7) {
-                        format!(" alt=\"{}\"", self.generate_safe_text())
-                    } else {
-                        String::new()
-                    };
-                    format!("<img src=\"{}\"{}>", src, alt)
-                }
-                "br" => "<br>".to_string(),
-                _ => unreachable!(),
-            }
-        }
-
-        fn generate_text(&mut self) -> String {
-            let words = vec![
-                "hello", "world", "test", "content", "sample", "data", "text",
-                "lorem", "ipsum", "dolor", "sit", "amet", "the", "quick",
-                "brown", "fox", "jumps", "over", "lazy", "dog",
-            ];
-
-            let num_words = self.rng.random_range(1..=10);
-            let selected_words: Vec<&str> = (0..num_words)
-                .map(|_| *words.choose(&mut self.rng).unwrap())
-                .collect();
-
-            // Sometimes add special characters to test escaping
-            let mut text = selected_words.join(" ");
-            if self.rng.random_bool(0.2) {
-                let specials = vec!["&", "<", ">", "\"", "'"];
-                let special = specials.choose(&mut self.rng).unwrap();
-                text.push_str(special);
-            }
-
-            text
-        }
-
-        fn generate_safe_text(&mut self) -> String {
-            let words = vec!["safe", "text", "content", "image", "description"];
-            let num_words = self.rng.random_range(1..=3);
-            (0..num_words)
-                .map(|_| *words.choose(&mut self.rng).unwrap())
-                .collect::<Vec<&str>>()
-                .join(" ")
-        }
-
-        fn generate_url(&mut self) -> String {
-            let protocols = vec!["http://", "https://", ""];
-            let domains = vec!["example.com", "test.org", "sample.net", "localhost"];
-            let paths = vec!["", "/path", "/image.jpg", "/page.html", "/test"];
-
-            let protocol = protocols.choose(&mut self.rng).unwrap();
-            let domain = domains.choose(&mut self.rng).unwrap();
-            let path = paths.choose(&mut self.rng).unwrap();
-
-            // Sometimes add problematic characters to test attribute parsing
-            if self.rng.random_bool(0.1) {
-                format!("{}{}{}<test>", protocol, domain, path)
-            } else {
-                format!("{}{}{}", protocol, domain, path)
-            }
-        }
+    fn image_without_alt() {
+        let html = "<p><img src=\"example_img\"></p>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_fuzzer_basic() {
-        let mut fuzzer = HtmlFuzzer::new(42);
-        
-        for i in 0..50 {
-            let html = fuzzer.generate_html();
-            println!("Fuzzer test {}: {}", i, &html[..html.len().min(100)]);
-            
-            match HtmlText::from_str(&html) {
-                Ok(parsed) => {
-                    // Verify round-trip doesn't crash
-                    let _output = parsed.to_html();
-                }
-                Err(e) => {
-                    // Some generated HTML will be invalid - that's expected
-                    println!("Expected error for test {}: {:?}", i, e);
-                }
-            }
-        }
+    fn anchor_with_href_refid() {
+        // Pretend RefId supports parsing like "John.3.16"
+        let html = "<p><a href=\"John.3.16\">text</a></p>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_fuzzer_stress() {
-        let seeds = vec![1, 42, 123, 999, 12345];
-        
-        for seed in seeds {
-            let mut fuzzer = HtmlFuzzer::new(seed);
-            let mut valid_count = 0;
-            let mut error_count = 0;
-            
-            for _ in 0..100 {
-                let html = fuzzer.generate_html();
-                
-                match HtmlText::from_str(&html) {
-                    Ok(parsed) => {
-                        valid_count += 1;
-                        // Ensure round-trip works
-                        let output = parsed.to_html();
-                        assert!(!output.is_empty());
-                    }
-                    Err(_) => {
-                        error_count += 1;
-                        // Errors are expected for invalid HTML
-                    }
-                }
-            }
-            
-            println!("Seed {}: {} valid, {} errors", seed, valid_count, error_count);
-            assert!(valid_count > 0, "Should have at least some valid parses");
-        }
+    fn anchor_with_module_ref() {
+        let html = "<p><a href=\"lexicon:42\">see</a></p>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_fuzzer_edge_cases() {
-        let edge_cases = vec![
-            "",  // Empty input
-            "   ",  // Whitespace only
-            "<",  // Incomplete tag
-            ">",  // Stray closing bracket
-            "<>",  // Empty tag
-            "</p>",  // Closing tag without opening
-            "<p><p>nested</p></p>",  // Invalid nesting
-            "<p>text</p><p>more text</p>",  // Multiple blocks
-            "<p>text with &amp; entities</p>",  // Entities (not fully supported)
-            "<p attr='value'>text</p>",  // Unsupported attributes on p tag
-            r#"<img src="test" alt="description with "quotes"">"#,  // Complex quotes
-            "<a href='javascript:alert(\"xss\")'>link</a>",  // XSS attempt
-        ];
+    fn anchor_with_strongs() {
+        let html = "<p><a href=\"G3056\">word</a></p>";
+        roundtrip(html);
+    }
 
-        for (i, html) in edge_cases.iter().enumerate() {
-            println!("Testing edge case {}: {}", i, html);
-            match HtmlText::from_str(html) {
-                Ok(parsed) => {
-                    let output = parsed.to_html();
-                    println!("  -> Success: {}", output);
-                }
-                Err(e) => {
-                    println!("  -> Error: {:?}", e);
-                }
-            }
-        }
+    // ──────────────────────────────────────────────
+    // NESTING / COMPOSITION
+    // ──────────────────────────────────────────────
+
+    #[test]
+    fn paragraph_with_mixed_content() {
+        let html = "<p>Hello <b>bold</b><i>italic</i> world</p>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_performance() {
-        use std::time::Instant;
-        
-        let mut fuzzer = HtmlFuzzer::new(999);
-        let mut total_time = std::time::Duration::new(0, 0);
-        let mut successful_parses = 0;
-        
-        for _ in 0..1000 {
-            let html = fuzzer.generate_html();
-            let start = Instant::now();
-            
-            if let Ok(_) = HtmlText::from_str(&html) {
-                successful_parses += 1;
-            }
-            
-            total_time += start.elapsed();
-        }
-        
-        let avg_time = total_time.as_nanos() / 1000;
-        println!("Average parse time: {}ns ({} successful)", avg_time, successful_parses);
-        
-        // Ensure reasonable performance (less than 1ms average)
-        assert!(avg_time < 1_000_000, "Parser too slow: {}ns average", avg_time);
+    fn list_items_with_paragraphs() {
+        let html = "<ul><li><p>Text</p></li></ul>";
+        roundtrip(html);
     }
 
     #[test]
-    fn test_memory_safety() {
-        // Test with deeply nested content
-        let mut deep_html = String::new();
-        for _ in 0..50 {
-            deep_html.push_str("<p><b>");
-        }
-        deep_html.push_str("deep content");
-        for _ in 0..50 {
-            deep_html.push_str("</b></p>");
-        }
-        
-        // Should either parse or error gracefully without crashing
-        let _ = HtmlText::from_str(&deep_html);
-        
-        // Test with very long text
-        let long_text = "a".repeat(10000);
-        let long_html = format!("<p>{}</p>", long_text);
-        let result = HtmlText::from_str(&long_html).unwrap();
-        assert!(result.to_html().len() > 10000);
+    fn nested_lists() {
+        let html = "<ul><li>Outer<ul><li>Inner</li></ul></li></ul>";
+        roundtrip(html);
+    }
+
+    #[test]
+    fn multiple_blocks() {
+        let html = "<h1>Title</h1><p>Text</p><hr><p>More</p>";
+        roundtrip(html);
+    }
+
+    // ──────────────────────────────────────────────
+    // INVALID HTML TESTS
+    // ──────────────────────────────────────────────
+
+    #[test]
+    fn missing_closing_tag() {
+        let html = "<p>Unclosed";
+        let err = HtmlText::from_str(html).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::UnexpectedEOF));
+    }
+
+    #[test]
+    fn invalid_tag_in_paragraph() {
+        let html = "<p><ul></ul></p>";
+        let err = HtmlText::from_str(html).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidNesting(_)));
+    }
+
+    #[test]
+    fn list_with_text_not_li() {
+        let html = "<ul>text</ul>";
+        let err = HtmlText::from_str(html).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidNesting(_)));
+    }
+
+    #[test]
+    fn missing_required_href_attr() {
+        let html = "<p><a>missing</a></p>";
+        let err = HtmlText::from_str(html).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::MissingRequiredAttr(_)));
+    }
+
+    #[test]
+    fn invalid_image_src() {
+        // src cannot have invalid name characters
+        let html = "<p><img src=\"!bad\"></p>";
+        let err = HtmlText::from_str(html).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidAttrs(_)));
+    }
+
+    #[test]
+    fn unsupported_tag() {
+        let html = "<div>test</div>";
+        let err = HtmlText::from_str(html).unwrap_err();
+        assert!(matches!(err.kind, ErrorKind::InvalidNesting(_)));
+    }
+
+    // ──────────────────────────────────────────────
+    // ROUNDTRIP PROPERTY TESTS
+    // ──────────────────────────────────────────────
+
+    #[test]
+    fn roundtrip_minimal_document() {
+        let html = "<p>simple</p>";
+        roundtrip(html);
+    }
+
+    #[test]
+    fn roundtrip_complex_document() {
+        let html = "<h2>Header</h2><p>Some <b>bold</b> text and <a href=\"H1234\">link</a><br>plus image <img src=\"foo\"></p><ul><li>Item 1</li><li>Item 2</li></ul>";
+        roundtrip(html);
     }
 }

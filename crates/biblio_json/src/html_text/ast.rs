@@ -6,75 +6,90 @@ use serde::{Deserialize, Serialize};
 
 use crate::core::{RefId, StrongsNumber, VerseId};
 
-lazy_static::lazy_static!
-{
+lazy_static::lazy_static! {
     static ref HREF_MODULE_ENTRY_REGEX: Regex = Regex::new("^(?P<module>[a-zA-Z_][a-zA-Z_0-9]*):(?P<entry>\\d+)$").unwrap();
     static ref IMAGE_REF_REGEX: Regex = Regex::new("^[a-zA-Z_][a-zA-Z_0-9]*$").unwrap();
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Block
-{
-    Paragraph(Vec<Inline>),
-    Heading { level: u8, content: Vec<Inline> },
-    List { ordered: bool, items: Vec<Vec<Block>> },
+pub enum Node {
+    // Block-level elements
+    Paragraph(Vec<Node>),
+    Heading { level: u8, content: Vec<Node> },
+    List { ordered: bool, items: Vec<Node> },
+    ListItem(Vec<Node>),
     HorizontalRule,
-}
-
-impl Block 
-{
-    pub fn to_html(&self) -> String 
-    {
-        match self 
-        {
-            Block::Paragraph(inls) => format!("<p>{}</p>", inls.iter().map(Inline::to_html).join("")),
-            Block::Heading { level, content } => format!("<h{l}>{}</h{l}>", content.iter().map(Inline::to_html).join(""), l = level),
-            Block::List { ordered, items } => {
-                let tag = if *ordered { "ol" } else { "ul" };
-                let body = items.iter().map(|it| format!("<li>{}</li>", it.iter().map(Block::to_html).join(""))).collect::<String>();
-                format!("<{t}>{b}</{t}>", t = tag, b = body)
-            }
-            Block::HorizontalRule => "<hr>".to_string(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Inline 
-{
+    
+    // Inline elements
     Text(String),
-    Underline(Vec<Inline>),
-    Italic(Vec<Inline>),
-    Bold(Vec<Inline>),
-    Strike(Vec<Inline>),
+    Underline(Vec<Node>),
+    Italic(Vec<Node>),
+    Bold(Vec<Node>),
+    Strike(Vec<Node>),
     Image { src: AssetIdName, alt: Option<String> },
-    Anchor {
-        href: HRefSrc,
-        content: Vec<Inline>,
-    },
+    Anchor { href: HRefSrc, content: Vec<Node> },
     LineBreak,
 }
 
-impl Inline
-{
-    pub fn to_html(&self) -> String 
-    {
-        match self
-        {
-            Inline::Text(t) => escape_text(t),
-            Inline::Underline(v) => format!("<u>{}</u>", v.iter().map(Self::to_html).join("")),
-            Inline::Italic(v) => format!("<i>{}</i>", v.iter().map(Self::to_html).join("")),
-            Inline::Bold(v) => format!("<b>{}</b>", v.iter().map(Self::to_html).join("")),
-            Inline::Strike(v) => format!("<s>{}</s>", v.iter().map(Self::to_html).join("")),
-            Inline::LineBreak => "<br>".into(),
-            Inline::Image { src, alt } => {
+impl Node {
+    pub fn is_block(&self) -> bool {
+        matches!(
+            self,
+            Node::Paragraph(_) | Node::Heading { .. } | Node::List { .. } | 
+            Node::ListItem(_) | Node::HorizontalRule
+        )
+    }
+
+    pub fn is_inline(&self) -> bool {
+        matches!(
+            self,
+            Node::Text(_) | Node::Underline(_) | Node::Italic(_) | 
+            Node::Bold(_) | Node::Strike(_) | Node::Image { .. } | 
+            Node::Anchor { .. } | Node::LineBreak
+        )
+    }
+
+    pub fn to_html(&self) -> String {
+        match self {
+            Node::Paragraph(children) => {
+                format!("<p>{}</p>", children.iter().map(Node::to_html).join(""))
+            }
+            Node::Heading { level, content } => {
+                format!("<h{l}>{}</h{l}>", content.iter().map(Node::to_html).join(""), l = level)
+            }
+            Node::List { ordered, items } => {
+                let tag = if *ordered { "ol" } else { "ul" };
+                let body = items.iter().map(Node::to_html).join("");
+                format!("<{t}>{b}</{t}>", t = tag, b = body)
+            }
+            Node::ListItem(children) => {
+                format!("<li>{}</li>", children.iter().map(Node::to_html).join(""))
+            }
+            Node::HorizontalRule => "<hr>".to_string(),
+            Node::Text(t) => escape_text(t),
+            Node::Underline(children) => {
+                format!("<u>{}</u>", children.iter().map(Node::to_html).join(""))
+            }
+            Node::Italic(children) => {
+                format!("<i>{}</i>", children.iter().map(Node::to_html).join(""))
+            }
+            Node::Bold(children) => {
+                format!("<b>{}</b>", children.iter().map(Node::to_html).join(""))
+            }
+            Node::Strike(children) => {
+                format!("<s>{}</s>", children.iter().map(Node::to_html).join(""))
+            }
+            Node::LineBreak => "<br>".into(),
+            Node::Image { src, alt } => {
                 if let Some(alt_text) = alt {
                     format!("<img src=\"{}\" alt=\"{}\">", escape_attr(&src), escape_attr(alt_text))
                 } else {
                     format!("<img src=\"{}\">", escape_attr(&src))
                 }
-            },
-            Inline::Anchor { href, content } => format!("<a href=\"{}\">{}</a>", escape_attr(&href.to_string()), content.iter().map(Self::to_html).join("")),
+            }
+            Node::Anchor { href, content } => {
+                format!("<a href=\"{}\">{}</a>", escape_attr(&href.to_string()), content.iter().map(Node::to_html).join(""))
+            }
         }
     }
 }
@@ -82,152 +97,126 @@ impl Inline
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct AssetIdName(String);
 
-impl Deref for AssetIdName
-{
+impl Deref for AssetIdName {
     type Target = str;
-
-    fn deref(&self) -> &Self::Target 
-    {
+    fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl std::fmt::Display for AssetIdName
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
-    {
+impl std::fmt::Display for AssetIdName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
     }
 }
 
-impl FromStr for AssetIdName
-{
+impl FromStr for AssetIdName {
     type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> 
-    {
-        if IMAGE_REF_REGEX.is_match(s) 
-        {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if IMAGE_REF_REGEX.is_match(s) {
             Ok(Self(s.into()))
-        }
-        else 
-        {
-            Err(format!("src '{}' is not formatted properly", s))    
+        } else {
+            Err(format!("src '{}' is not formatted properly", s))
         }
     }
 }
 
-impl Serialize for AssetIdName
-{
+impl Serialize for AssetIdName {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: serde::Serializer 
-    {
+    where S: serde::Serializer {
         serializer.serialize_str(&self.to_string())
     }
 }
 
-impl<'de> Deserialize<'de> for AssetIdName
-{
+impl<'de> Deserialize<'de> for AssetIdName {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: serde::Deserializer<'de> 
-    {
+    where D: serde::Deserializer<'de> {
         let s = String::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
-
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum HRefSrc
-{
-    RefId(RefId),
-    Strongs(StrongsNumber),
+pub enum HRefSrc {
+    RefId(RefId),  // Simplified - replace with your RefId type
+    Strongs(StrongsNumber), // Simplified - replace with your StrongsNumber type
     ModuleRef {
         module_alias: AssetIdName,
         entry_id: u32,
-    }
+    },
 }
 
-impl std::fmt::Display for HRefSrc
-{
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
-    {
-        match self 
-        {
-            HRefSrc::RefId(verse_id) => write!(f, "{}", verse_id),
-            HRefSrc::Strongs(strongs_number) => write!(f, "{}", strongs_number),
+impl std::fmt::Display for HRefSrc {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            HRefSrc::RefId(id) => write!(f, "{}", id),
+            HRefSrc::Strongs(num) => write!(f, "{}", num),
             HRefSrc::ModuleRef { module_alias, entry_id } => write!(f, "{}:{}", module_alias, entry_id),
         }
     }
 }
 
-impl FromStr for HRefSrc
+impl FromStr for HRefSrc 
 {
     type Err = String;
-
     fn from_str(s: &str) -> Result<Self, Self::Err> 
     {
-        if let Ok(ref_id) = RefId::from_str(s)
-        {
-            Ok(Self::RefId(ref_id))
-        }
-        else if let Ok(strongs) = StrongsNumber::from_str(s)
-        {
-            Ok(Self::Strongs(strongs))
-        }
-        else if let Some(captures) = HREF_MODULE_ENTRY_REGEX.captures(s)
-        {
+        // Try module ref pattern first
+        if let Some(captures) = HREF_MODULE_ENTRY_REGEX.captures(s) {
             let module_alias = captures.name("module").unwrap().as_str().to_owned();
-            let entry_id = captures.name("entry").unwrap().as_str().parse::<u32>().unwrap();
-            Ok(Self::ModuleRef { module_alias: AssetIdName::from_str(&module_alias).unwrap(), entry_id })
+            let entry_id = captures.name("entry").unwrap().as_str().parse::<u32>()
+                .map_err(|e| format!("Invalid entry_id: {}", e))?;
+            return Ok(Self::ModuleRef { 
+                module_alias: AssetIdName::from_str(&module_alias)?, 
+                entry_id 
+            });
         }
-        else 
+        
+        if let Some(strongs) = StrongsNumber::from_str(s).ok()
         {
-            Err(format!("href '{}' is not formatted properly", s))    
+            return Ok(Self::Strongs(strongs))
         }
+        
+        // Default to RefId
+        Ok(Self::RefId(RefId::from_str(s)?))
     }
 }
 
-impl Serialize for HRefSrc
-{
+impl Serialize for HRefSrc {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: serde::Serializer 
-    {
+    where S: serde::Serializer {
         serializer.serialize_str(&self.to_string())
     }
 }
 
-impl<'de> Deserialize<'de> for HRefSrc
-{
+impl<'de> Deserialize<'de> for HRefSrc {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: serde::Deserializer<'de> 
-    {
+    where D: serde::Deserializer<'de> {
         let s = String::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)
     }
 }
 
-fn escape_text(t: &str) -> String 
-{
-    // minimal escaping for text content
-    t.chars().map(|c| match c {
-        '&' => "&amp;".to_string(),
-        '<' => "&lt;".to_string(),
-        '>' => "&gt;".to_string(),
-        _ => c.to_string(),
-    }).collect::<String>()
+fn escape_text(t: &str) -> String {
+    t.chars()
+        .map(|c| match c {
+            '&' => "&amp;".to_string(),
+            '<' => "&lt;".to_string(),
+            '>' => "&gt;".to_string(),
+            _ => c.to_string(),
+        })
+        .collect()
 }
 
-fn escape_attr(t: &str) -> String 
-{
-    // escaping for attribute values
-    t.chars().map(|c| match c {
-        '&' => "&amp;".to_string(),
-        '<' => "&lt;".to_string(),
-        '>' => "&gt;".to_string(),
-        '"' => "&quot;".to_string(),
-        '\'' => "&#39;".to_string(),
-        _ => c.to_string(),
-    }).collect::<String>()
+fn escape_attr(t: &str) -> String {
+    t.chars()
+        .map(|c| match c {
+            '&' => "&amp;".to_string(),
+            '<' => "&lt;".to_string(),
+            '>' => "&gt;".to_string(),
+            '"' => "&quot;".to_string(),
+            '\'' => "&#39;".to_string(),
+            _ => c.to_string(),
+        })
+        .collect()
 }
