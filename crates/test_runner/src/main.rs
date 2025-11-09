@@ -1,6 +1,6 @@
-use std::{fs, str::FromStr};
+use std::str::FromStr;
 
-use biblio_json::{Package, core::{OsisBook, VerseId}};
+use biblio_json::{Package, core::{VerseId}};
 use itertools::Itertools;
 
 fn main()

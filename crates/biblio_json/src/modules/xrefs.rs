@@ -4,10 +4,9 @@ use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
 
-use crate::ValidationContext;
 use crate::core::VerseId;
 use crate::modules::EntryId;
-use crate::validation::{RefIdValidationError, ValidationContextBuilder};
+use crate::validation::ValidationContextBuilder;
 use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]

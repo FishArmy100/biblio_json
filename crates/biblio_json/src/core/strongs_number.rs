@@ -1,6 +1,4 @@
-use std::{fmt::Display, ops::Deref, str::FromStr};
-
-use itertools::Itertools;
+use std::{fmt::Display, str::FromStr};
 use regex::Regex;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 

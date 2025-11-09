@@ -4,7 +4,7 @@ use flate2::{Compression, read::{ZlibDecoder, ZlibEncoder}};
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::Deserialize;
-use std::io::{Read, Write};
+use std::io::Read;
 
 pub fn load_file<P>(path: P) -> Result<String, String>
     where P : AsRef<Path>
@@ -35,6 +35,7 @@ pub fn load_toml<T, P>(path: P) -> Result<T, String>
         .map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 pub fn load_json<T, P>(path: P) -> Result<T, String> 
     where P : AsRef<Path>,
           T : for<'a> Deserialize<'a>
@@ -58,12 +59,14 @@ pub fn load_json_lines<T, P>(path: P) -> Result<Vec<(T, usize)>, String>
     }).collect()
 }
 
+#[allow(dead_code)]
 pub fn write_file<P>(path: P, src: &str) -> Result<(), String>
     where P : AsRef<Path>
 {
     fs::write(path, src).map_err(|e| e.to_string())
 }
 
+#[allow(dead_code)]
 pub fn write_file_bin<P>(path: P, src: &[u8]) -> Result<(), String>
     where P : AsRef<Path>
 {

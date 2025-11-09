@@ -4,7 +4,6 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::core::OsisBook;
-use std::collections::HashSet;
 
 lazy_static::lazy_static!
 {
@@ -74,6 +73,8 @@ impl<'de> Deserialize<'de> for ChapterId
 #[cfg(test)]
 mod tests 
 {
+    use std::collections::HashSet;
+
     use super::*;
 
     #[test]

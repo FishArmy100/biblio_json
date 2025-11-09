@@ -1,10 +1,9 @@
-use std::{collections::HashMap, fmt::Display, num::NonZeroU32, str::FromStr};
+use std::{collections::HashMap};
 
 use itertools::Itertools;
-use regex::Regex;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, StrongsNumber, VerseId, WordRange, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, ValidationContext}, utils, validation::ValidationContextBuilder};
+use crate::{core::{RefId, StrongsNumber, VerseId, WordRange, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
