@@ -4,10 +4,12 @@ pub mod xrefs;
 pub mod strongs;
 pub mod commentary;
 pub mod notebook;
+pub mod readings;
 
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use bible::BibleModule;
+use itertools::Either;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
@@ -42,7 +44,16 @@ pub enum ModuleValidationError
     EntryIdDuplicate
     {
         id: EntryId,
-    }
+    },
+    InvalidReadingsIndex {
+        index: u32,
+    },
+    InvalidReadingsCount
+    {
+        required: Either<u32, (u32, u32)>,
+        found: u32,
+    },
+    InvalidEntryIndexes,
 }
 
 impl Display for ModuleValidationError
@@ -58,6 +69,12 @@ impl Display for ModuleValidationError
             },
             Self::HtmlError { error } => write!(f, "{}", error),
             Self::EntryIdDuplicate { id } => write!(f, "Duplicate entries for id '{}'", id),
+            Self::InvalidReadingsCount { required, found } => match required {
+                Either::Left(r) => write!(f, "Modules requires {} number of readings, but found {}", r, found),
+                Either::Right((r_a, r_b)) => write!(f, "Module requires {} or {} number of readings, but found {}", r_a, r_b, found),
+            },
+            Self::InvalidReadingsIndex { index } => write!(f, "Invalid readings index {}", index),
+            Self::InvalidEntryIndexes => write!(f, "Readings modules has invalid index values for its readings entries")
         }
     }
 }
