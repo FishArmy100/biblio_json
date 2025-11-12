@@ -13,7 +13,7 @@ use itertools::Either;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, notebook::{NotebookEntry, NotebookModule}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
+use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, notebook::{NotebookEntry, NotebookModule}, readings::ReadingsModuleValidationError, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -45,15 +45,15 @@ pub enum ModuleValidationError
     {
         id: EntryId,
     },
-    InvalidReadingsIndex {
-        index: u32,
-    },
-    InvalidReadingsCount
+    ReadingsModuleError(ReadingsModuleValidationError)
+}
+
+impl From<ReadingsModuleValidationError> for ModuleValidationError
+{
+    fn from(error: ReadingsModuleValidationError) -> Self 
     {
-        required: Either<u32, (u32, u32)>,
-        found: u32,
-    },
-    InvalidEntryIndexes,
+        Self::ReadingsModuleError(error)
+    }
 }
 
 impl Display for ModuleValidationError
@@ -69,12 +69,7 @@ impl Display for ModuleValidationError
             },
             Self::HtmlError { error } => write!(f, "{}", error),
             Self::EntryIdDuplicate { id } => write!(f, "Duplicate entries for id '{}'", id),
-            Self::InvalidReadingsCount { required, found } => match required {
-                Either::Left(r) => write!(f, "Modules requires {} number of readings, but found {}", r, found),
-                Either::Right((r_a, r_b)) => write!(f, "Module requires {} or {} number of readings, but found {}", r_a, r_b, found),
-            },
-            Self::InvalidReadingsIndex { index } => write!(f, "Invalid readings index {}", index),
-            Self::InvalidEntryIndexes => write!(f, "Readings modules has invalid index values for its readings entries")
+            Self::ReadingsModuleError(e) => write!(f, "{}", e),
         }
     }
 }
