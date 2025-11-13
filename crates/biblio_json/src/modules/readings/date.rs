@@ -8,6 +8,12 @@ pub struct ReadingsDate(time::Date);
 
 impl ReadingsDate
 {
+    pub fn now() -> Self 
+    {
+        let now = time::OffsetDateTime::now_utc();
+        Self(now.date())
+    }
+
     pub fn new(year: i32, month: ReadingsMonth, day: u8) -> Option<Self>
     {
         Some(Self(Date::from_calendar_date(year, month, day).ok()?))

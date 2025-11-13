@@ -11,8 +11,7 @@ pub struct StrongsDefEntry
 {
     pub strongs_ref: StrongsNumber,
     pub word: String,
-    pub definitions: Vec<HtmlText>,
-    pub derivation: Option<HtmlText>,
+    pub definition: HtmlText,
     pub id: EntryId,
 }
 
@@ -84,16 +83,7 @@ impl StrongsDefsModule
             .collect_vec();
 
         let entry_errors = self.entries.iter().map(|e| {
-            let mut errors = e.definitions.iter().filter_map(|d| d.validate(&context).err()).flatten().collect_vec();
-            if let Some(derivation) = &e.derivation
-            {
-                if let Some(e) = derivation.validate(&context).err()
-                {
-                    errors.extend(e);
-                }
-            }
-            
-            errors
+            e.definition.validate(&context).err().unwrap_or_default()
         })
         .flatten()
         .map(|e| ModuleValidationError::HtmlError { error: e })
