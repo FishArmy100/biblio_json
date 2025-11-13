@@ -11,11 +11,104 @@ lazy_static::lazy_static! {
     static ref IMAGE_REF_REGEX: Regex = Regex::new("^[a-zA-Z_][a-zA-Z_0-9]*$").unwrap();
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum HeaderLevel 
+{
+    H1,
+    H2,
+    H3,
+}
+
+impl HeaderLevel
+{
+    pub fn to_u8(self) -> u8
+    {
+        self.into()
+    }
+}
+
+impl TryFrom<u8> for HeaderLevel
+{
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> 
+    {
+        match value 
+        {
+            1 => Ok(Self::H1),
+            2 => Ok(Self::H2),
+            3 => Ok(Self::H3),
+            _ => Err(format!("'{}' is not a valid header size",  value))
+        }
+    }
+}
+
+impl TryFrom<&u8> for HeaderLevel
+{
+    type Error = String;
+
+    fn try_from(value: &u8) -> Result<Self, Self::Error> 
+    {
+        match value 
+        {
+            1 => Ok(Self::H1),
+            2 => Ok(Self::H2),
+            3 => Ok(Self::H3),
+            _ => Err(format!("'{}' is not a valid header size", value))
+        }
+    }
+}
+
+impl From<HeaderLevel> for u8 
+{
+    fn from(value: HeaderLevel) -> Self 
+    {
+        match value 
+        {
+            HeaderLevel::H1 => 1,
+            HeaderLevel::H2 => 2,
+            HeaderLevel::H3 => 3,
+        }
+    }
+}
+
+impl From<&HeaderLevel> for u8 
+{
+    fn from(value: &HeaderLevel) -> Self 
+    {
+        match value 
+        {
+            HeaderLevel::H1 => 1,
+            HeaderLevel::H2 => 2,
+            HeaderLevel::H3 => 3,
+        }
+    }
+}
+
+impl Serialize for HeaderLevel
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: serde::Serializer 
+    {
+        serializer.serialize_u8(self.into())
+    }
+}
+
+impl<'de> Deserialize<'de> for HeaderLevel
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: serde::Deserializer<'de> 
+    {
+        let level = u8::deserialize(deserializer)?;
+        HeaderLevel::try_from(level).map_err(serde::de::Error::custom)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     // Block-level elements
     Paragraph(Vec<Node>),
-    Heading { level: u8, content: Vec<Node> },
+    Heading { level: HeaderLevel, content: Vec<Node> },
     List { ordered: bool, items: Vec<Node> },
     ListItem(Vec<Node>),
     HorizontalRule,
@@ -55,7 +148,7 @@ impl Node {
                 format!("<p>{}</p>", children.iter().map(Node::to_html).join(""))
             }
             Node::Heading { level, content } => {
-                format!("<h{l}>{}</h{l}>", content.iter().map(Node::to_html).join(""), l = level)
+                format!("<h{l}>{}</h{l}>", content.iter().map(Node::to_html).join(""), l = level.to_u8())
             }
             Node::List { ordered, items } => {
                 let tag = if *ordered { "ol" } else { "ul" };

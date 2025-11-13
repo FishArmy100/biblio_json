@@ -1,6 +1,4 @@
-use std::str::FromStr;
-
-use biblio_json::{Package, core::VerseId, modules::readings::date::{ReadingsDate, ReadingsMonth}};
+use biblio_json::{Package, modules::readings::date::{ReadingsDate, ReadingsMonth}};
 use itertools::Itertools;
 
 fn main()

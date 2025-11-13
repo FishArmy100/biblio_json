@@ -24,7 +24,7 @@ pub struct DictEntry
 {
     pub term: String,
     pub aliases: Option<Vec<String>>,
-    pub definitions: Vec<HtmlText>,
+    pub definition: HtmlText,
     pub id: EntryId,
 }
 
@@ -90,8 +90,9 @@ impl DictModule
 
         for entry in &self.entries
         {
-            let entry_errors = entry.definitions.iter()
-                .filter_map(|d| d.validate(&context).err()).flatten()
+            let entry_errors = entry.definition.validate(&context).err()
+                .unwrap_or_default()
+                .into_iter()
                 .map(|error| ModuleValidationError::HtmlError { error })
                 .collect_vec();
 

@@ -284,13 +284,13 @@ mod tests {
 
     #[test]
     fn heading_levels() {
-        for level in 1..=6 {
+        for level in 1..=3 {
             let html = format!("<h{0}>Header {0}</h{0}>", level);
             let doc = parse_ok(&html);
             assert_eq!(
                 doc.nodes,
                 vec![Node::Heading {
-                    level,
+                    level: level.try_into().unwrap(),
                     content: vec![Node::Text(format!("Header {}", level))]
                 }]
             );
