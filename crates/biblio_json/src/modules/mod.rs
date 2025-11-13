@@ -9,11 +9,10 @@ pub mod readings;
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use bible::BibleModule;
-use itertools::Either;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, notebook::{NotebookEntry, NotebookModule}, readings::ReadingsModuleValidationError, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
+use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, notebook::{NotebookEntry, NotebookModule}, readings::{ReadingsEntry, ReadingsModule, ReadingsModuleValidationError}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
@@ -85,6 +84,7 @@ pub enum Module
     StrongsLinks(#[serde_as(as = "Arc<_>")] Arc<StrongsLinksModule>),
     Commentary(#[serde_as(as = "Arc<_>")] Arc<CommentaryModule>),
     Notebook(#[serde_as(as = "Arc<_>")] Arc<NotebookModule>),
+    Readings(#[serde_as(as = "Arc<_>")] Arc<ReadingsModule>),
 }
 
 impl Module
@@ -215,6 +215,26 @@ impl Module
         }
     }
 
+    pub fn is_readings(&self) -> bool
+    {
+        match self 
+        {
+            Self::Readings(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn as_readings(&self) -> Option<Arc<ReadingsModule>>
+    {
+        match self 
+        {
+            Self::Readings(r) => Some(r.clone()),
+            _ => None,
+        }
+    }
+
+
+
     pub fn name(&self) -> &str 
     {
         match self 
@@ -226,6 +246,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => &strongs_links_module.config.name,
             Module::Commentary(commentary_module) => &commentary_module.config.name,
             Module::Notebook(notebook_module) => &notebook_module.config.name,
+            Module::Readings(reading) => &reading.config.name
         }
     }
 
@@ -240,6 +261,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.description.as_ref(),
             Module::Commentary(commentary_module) => commentary_module.config.description.as_ref(),
             Module::Notebook(notebook_module) => notebook_module.config.description.as_ref(),
+            Module::Readings(readings_module) => readings_module.config.description.as_ref(),
         }
     }
 
@@ -254,6 +276,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.language,
             Module::Commentary(commentary_module) => commentary_module.config.language,
             Module::Notebook(notebook_module) => notebook_module.config.language,
+            Module::Readings(readings_module) => readings_module.config.language,
         }
     }
 
@@ -268,6 +291,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.authors.as_ref(),
             Module::Commentary(commentary_module) => commentary_module.config.authors.as_ref(),
             Module::Notebook(notebook_module) => notebook_module.config.authors.as_ref(),
+            Module::Readings(readings_module) => readings_module.config.authors.as_ref(),
         }
     }
 
@@ -282,6 +306,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.pub_year,
             Module::Commentary(commentary_module) => commentary_module.config.pub_year,
             Module::Notebook(notebook_module) => notebook_module.config.pub_year,
+            Module::Readings(readings_module) => readings_module.config.pub_year,
         }
     }
 
@@ -296,6 +321,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => &strongs_links_module.config.external,
             Module::Commentary(commentary_module) => &commentary_module.config.external,
             Module::Notebook(notebook_module) => &notebook_module.config.external,
+            Module::Readings(readings_module) => &readings_module.config.external,
         }
     }
 
@@ -310,6 +336,7 @@ impl Module
             Module::StrongsLinks(links) => links.validate(builder),
             Module::Commentary(commentary) => commentary.validate(builder),
             Module::Notebook(notebook_module) => notebook_module.validate(builder),
+            Module::Readings(readings_module) => readings_module.validate(builder),
         }
     }
 
@@ -324,6 +351,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.entries.iter().find(|e| e.id == entry).is_some(),
             Module::Commentary(commentary_module) => commentary_module.entries.iter().find(|e| e.id == entry).is_some(),
             Module::Notebook(notebook_module) => notebook_module.entries.iter().find(|e| e.id() == entry).is_some(),
+            Module::Readings(readings_module) => readings_module.entries.iter().find(|e| e.id == entry).is_some()
         }
     }
 
@@ -338,6 +366,7 @@ impl Module
             Module::StrongsLinks(strongs_links) => ModuleEntry::StrongsLink(strongs_links.entries.iter().find(|e| e.id == entry_id)?),
             Module::Commentary(commentary) => ModuleEntry::Commentary(commentary.entries.iter().find(|e| e.id == entry_id)?),
             Module::Notebook(notebook) => ModuleEntry::Notebook(notebook.entries.iter().find(|e| e.id() == entry_id)?),
+            Module::Readings(readings_module) => ModuleEntry::Readings(readings_module.entries.iter().find(|e| e.id == entry_id)?),
         };
 
         Some(entry)
@@ -356,6 +385,7 @@ pub enum ModuleEntry<'a>
     Commentary(&'a CommentaryEntry),
     Verse(&'a Verse),
     Notebook(&'a NotebookEntry),
+    Readings(&'a ReadingsEntry),
 }
 
 impl<'a> ModuleEntry<'a>
@@ -454,6 +484,20 @@ impl<'a> ModuleEntry<'a>
         match self 
         {
             ModuleEntry::Notebook(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn is_readings(&self) -> bool
+    {
+        matches!(self, ModuleEntry::Readings(_))
+    }
+
+    pub fn as_readings(&self) -> Option<&'a ReadingsEntry>
+    {
+        match self 
+        {
+            ModuleEntry::Readings(e) => Some(e),
             _ => None,
         }
     }

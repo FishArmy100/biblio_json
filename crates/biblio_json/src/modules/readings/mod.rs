@@ -1,15 +1,15 @@
 pub mod date;
 
 use core::fmt;
-use std::str::FromStr;
+use std::{num::NonZeroU32, str::FromStr};
 
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{core::RefId, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, readings::date::ReadingsDate}, utils, validation::ValidationContextBuilder};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, readings::date::ReadingsDate}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "snake_case")]
 pub struct ReadingsConfig
 {
     pub name: String,
@@ -18,6 +18,7 @@ pub struct ReadingsConfig
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
     pub license: Option<String>,
+    pub language: Option<Language>,
     pub format: ReadingsFormat,
     #[serde(default)]
     pub external: ExternalModuleData,
@@ -84,12 +85,13 @@ impl<'de> Deserialize<'de> for LeapYearHandler
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "type")]
 pub enum ReadingsFormat
 {
     /// Represents readings for `count` number of days. Must have exactly `count` number of entries
     Daily
     {
-        count: u32,
+        count: NonZeroU32,
     },
 
     /// Represents readings for `count` number of weeks and are mapped to different days of the weeks.
@@ -101,7 +103,7 @@ pub enum ReadingsFormat
     /// - ...
     Weekly
     {
-        count: u32,
+        count: NonZeroU32,
     },
 
     ///  Each day is mapped based on the current day of the month. Must have exactly 31 entries, each mapped to a day.
@@ -112,7 +114,7 @@ pub enum ReadingsFormat
     /// If leap year handler is set to Index(...), it must point to a valid entry.
     Yearly
     {
-        count: u32,
+        count: NonZeroU32,
         leap_year: LeapYearHandler
     }
 }
@@ -171,11 +173,11 @@ impl ReadingsModule
         match &self.config.format
         {
             ReadingsFormat::Daily { count } => {
-                let index = date.days_since(start_date) % count;
+                let index = date.days_since(start_date) % count.get();
                 Some(self.entries.iter().find(|e| e.index == index).unwrap())
             },
             ReadingsFormat::Weekly { count } => {
-                let week_index = date.weeks_since(start_date) % count;
+                let week_index = date.weeks_since(start_date) % count.get();
                 let index = week_index * 7 + date.day_of_week() as u32 - 1;
                 Some(self.entries.iter().find(|e| e.index == index).unwrap())
             },
@@ -192,7 +194,7 @@ impl ReadingsModule
                         LeapYearHandler::Index(i) => return Some(self.entries.iter().find(|e| e.index == *i).unwrap()),
                     }
                 }
-                let year_index = (date.year() - start_date.year()) as u32 % count;
+                let year_index = (date.year() - start_date.year()) as u32 % count.get();
                 let index = year_index * 365 + date.day_of_year() - 1;
                 Some(self.entries.iter().find(|e| e.index == index).unwrap())
             },
@@ -212,19 +214,19 @@ impl ReadingsModule
         match &self.config.format
         {
             ReadingsFormat::Daily { count } => {
-                if entry_count != *count
+                if entry_count != count.get()
                 {
                     errors.push(ReadingsModuleValidationError::InvalidReadingsCount { 
-                        required: Either::Left(*count), 
+                        required: Either::Left(count.get()), 
                         found: entry_count 
                     }.into());
                 }
             },
             ReadingsFormat::Weekly { count } => {
-                if entry_count != count * 7
+                if entry_count != count.get() * 7
                 {
                     errors.push(ReadingsModuleValidationError::InvalidReadingsCount { 
-                        required: Either::Left(*count * 7), 
+                        required: Either::Left(count.get() * 7), 
                         found: entry_count 
                     }.into());
                 }
@@ -240,10 +242,10 @@ impl ReadingsModule
             },
             ReadingsFormat::Yearly { count, leap_year } => match leap_year {
                 LeapYearHandler::Skip => {
-                    if entry_count != *count * 365
+                    if entry_count != count.get() * 365
                     {
                         errors.push(ReadingsModuleValidationError::InvalidReadingsCount { 
-                            required: Either::Left(*count * 365), 
+                            required: Either::Left(count.get() * 365), 
                             found: entry_count 
                         }.into());
                     }
@@ -254,10 +256,10 @@ impl ReadingsModule
                         errors.push(ReadingsModuleValidationError::InvalidReadingsIndex { index: *index }.into());
                     }
 
-                    if entry_count != *count * 365 && entry_count != *count * 365 + 1
+                    if entry_count != count.get() * 365 && entry_count != count.get() * 365 + 1
                     {
                         errors.push(ReadingsModuleValidationError::InvalidReadingsCount { 
-                            required: Either::Right((*count * 365, *count * 365 + 1)), 
+                            required: Either::Right((count.get() * 365, count.get() * 365 + 1)), 
                             found: entry_count 
                         }.into());
                     } 

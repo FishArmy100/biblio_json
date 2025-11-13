@@ -1,0 +1,6 @@
+name = "Bible in One Year"
+
+[format]
+type = "yearly"
+count = 1
+leap_year = "skip"

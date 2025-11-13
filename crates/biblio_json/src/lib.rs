@@ -8,7 +8,7 @@ use flate2::Compression;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, notebook::NotebookModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}, validation::ValidationContextBuilder};
+use crate::{core::{StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, notebook::NotebookModule, readings::ReadingsModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}, validation::ValidationContextBuilder};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -38,6 +38,7 @@ pub struct ModulePaths
     pub strongs_links: Option<String>,
     pub commentaries: Option<String>,
     pub notebooks: Option<String>,
+    pub readings: Option<String>,
 }
 
 #[derive(Debug)]
@@ -532,6 +533,19 @@ impl Package
         {
             let result = Self::load_module(root, notebooks, |dir, name| {
                 Ok(Module::Notebook(Arc::new(NotebookModule::load_json(dir, name)?)))
+            });
+
+            match result 
+            {
+                Ok(ok) => modules.extend(ok),
+                Err(e) => errors.push(e),
+            }
+        }
+
+        if let Some(readings) = &paths.readings
+        {
+            let result = Self::load_module(root, &readings, |dir, name| {
+                Ok(Module::Readings(Arc::new(ReadingsModule::load_json(dir, name)?)))
             });
 
             match result 
