@@ -12,14 +12,14 @@ lazy_static::lazy_static! {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum HeaderLevel 
+pub enum HeadingLevel 
 {
     H1,
     H2,
     H3,
 }
 
-impl HeaderLevel
+impl HeadingLevel
 {
     pub fn to_u8(self) -> u8
     {
@@ -27,7 +27,7 @@ impl HeaderLevel
     }
 }
 
-impl TryFrom<u8> for HeaderLevel
+impl TryFrom<u8> for HeadingLevel
 {
     type Error = String;
 
@@ -43,7 +43,7 @@ impl TryFrom<u8> for HeaderLevel
     }
 }
 
-impl TryFrom<&u8> for HeaderLevel
+impl TryFrom<&u8> for HeadingLevel
 {
     type Error = String;
 
@@ -59,33 +59,33 @@ impl TryFrom<&u8> for HeaderLevel
     }
 }
 
-impl From<HeaderLevel> for u8 
+impl From<HeadingLevel> for u8 
 {
-    fn from(value: HeaderLevel) -> Self 
+    fn from(value: HeadingLevel) -> Self 
     {
         match value 
         {
-            HeaderLevel::H1 => 1,
-            HeaderLevel::H2 => 2,
-            HeaderLevel::H3 => 3,
+            HeadingLevel::H1 => 1,
+            HeadingLevel::H2 => 2,
+            HeadingLevel::H3 => 3,
         }
     }
 }
 
-impl From<&HeaderLevel> for u8 
+impl From<&HeadingLevel> for u8 
 {
-    fn from(value: &HeaderLevel) -> Self 
+    fn from(value: &HeadingLevel) -> Self 
     {
         match value 
         {
-            HeaderLevel::H1 => 1,
-            HeaderLevel::H2 => 2,
-            HeaderLevel::H3 => 3,
+            HeadingLevel::H1 => 1,
+            HeadingLevel::H2 => 2,
+            HeadingLevel::H3 => 3,
         }
     }
 }
 
-impl Serialize for HeaderLevel
+impl Serialize for HeadingLevel
 {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::Serializer 
@@ -94,13 +94,13 @@ impl Serialize for HeaderLevel
     }
 }
 
-impl<'de> Deserialize<'de> for HeaderLevel
+impl<'de> Deserialize<'de> for HeadingLevel
 {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where D: serde::Deserializer<'de> 
     {
         let level = u8::deserialize(deserializer)?;
-        HeaderLevel::try_from(level).map_err(serde::de::Error::custom)
+        HeadingLevel::try_from(level).map_err(serde::de::Error::custom)
     }
 }
 
@@ -108,7 +108,7 @@ impl<'de> Deserialize<'de> for HeaderLevel
 pub enum Node {
     // Block-level elements
     Paragraph(Vec<Node>),
-    Heading { level: HeaderLevel, content: Vec<Node> },
+    Heading { level: HeadingLevel, content: Vec<Node> },
     List { ordered: bool, items: Vec<Node> },
     ListItem(Vec<Node>),
     HorizontalRule,
