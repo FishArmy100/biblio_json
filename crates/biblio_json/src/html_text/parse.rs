@@ -135,7 +135,7 @@ impl Parser {
                             self.next();
                             nodes.push(Node::HorizontalRule);
                         }
-                        (Context::Paragraph | Context::Heading | Context::ListItem | Context::Inline, "br") => {
+                        (Context::Document | Context::Paragraph | Context::Heading | Context::ListItem | Context::Inline, "br") => {
                             self.next();
                             nodes.push(Node::LineBreak);
                         }
