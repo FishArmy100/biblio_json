@@ -112,7 +112,11 @@ impl BibleSource
 {
     pub fn from_file(path: &str, books: &HashMap<OsisBook, String>, config: &BibleConfig) -> Result<BibleSource, String>
     {
-        let verses: Vec<(Verse, usize)> = utils::load_json_lines(path)?;
+        let verses: Vec<(Verse, usize)> = utils::load_json_lines(path)
+            .stringify_error()?
+            .into_iter()
+            .map(|l| (l.value, l.line))
+            .collect();
 
         let mut visited_books = HashSet::<OsisBook>::new();
         let mut current_book: Option<&OsisBook> = None;
