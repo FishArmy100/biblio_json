@@ -43,7 +43,7 @@ impl Display for ModuleId
 pub struct ExternalModuleData
 {
     #[serde(default)]
-    pub aliases: HashMap<AssetIdName, String>,
+    pub aliases: HashMap<ModuleId, String>,
     #[serde(default)]
     pub assets: HashMap<AssetIdName, String>,
 }

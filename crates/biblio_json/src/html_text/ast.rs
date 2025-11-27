@@ -4,7 +4,7 @@ use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::core::{RefId, StrongsNumber};
+use crate::{core::{RefId, StrongsNumber}, modules::ModuleId};
 
 lazy_static::lazy_static! {
     static ref HREF_MODULE_ENTRY_REGEX: Regex = Regex::new("^(?P<module>[a-zA-Z_][a-zA-Z_0-9]*):(?P<entry>\\d+)$").unwrap();
@@ -234,7 +234,7 @@ pub enum HRefSrc {
     RefId(RefId),  // Simplified - replace with your RefId type
     Strongs(StrongsNumber), // Simplified - replace with your StrongsNumber type
     ModuleRef {
-        module_alias: AssetIdName,
+        module_alias: ModuleId,
         entry_id: u32,
     },
 }
@@ -260,7 +260,7 @@ impl FromStr for HRefSrc
             let entry_id = captures.name("entry").unwrap().as_str().parse::<u32>()
                 .map_err(|e| format!("Invalid entry_id: {}", e))?;
             return Ok(Self::ModuleRef { 
-                module_alias: AssetIdName::from_str(&module_alias)?, 
+                module_alias: ModuleId::new(module_alias), 
                 entry_id 
             });
         }
