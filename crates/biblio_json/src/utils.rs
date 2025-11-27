@@ -3,7 +3,7 @@ use std::{fs, hash::Hash, path::Path};
 use flate2::{Compression, read::{ZlibDecoder, ZlibEncoder}};
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::io::Read;
 
 pub fn load_file<P>(path: P) -> Result<String, String>

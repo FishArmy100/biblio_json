@@ -5,7 +5,7 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
 
 use crate::core::VerseId;
-use crate::modules::EntryId;
+use crate::modules::{EntryId, ModuleId};
 use crate::validation::ValidationContextBuilder;
 use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationError}, utils};
 
@@ -15,13 +15,15 @@ use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{Extern
 pub struct XRefsConfig
 {
     pub name: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
     pub authors: Option<Vec<String>>,
     pub language: Option<Language>,
     pub description: Option<HtmlText>,
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
     pub license: Option<String>,
-    pub bible: Option<String>,
+    pub bible: Option<ModuleId>,
     #[serde(default)]
     pub external: ExternalModuleData,
 }
@@ -265,7 +267,7 @@ impl XRefModule
 
     pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
-        let context = builder.build(self.config.bible.as_ref().map(|b| b.as_str()), &self.config.external);
+        let context = builder.build(self.config.bible.as_ref(), &self.config.external);
 
         if let Some(bible) = self.config.bible.as_ref()
         {

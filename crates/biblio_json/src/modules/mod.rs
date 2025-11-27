@@ -14,6 +14,30 @@ use serde_with::serde_as;
 
 use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, notebook::{NotebookEntry, NotebookModule}, readings::{ReadingsEntry, ReadingsModule, ReadingsModuleValidationError}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ModuleId(String);
+
+impl ModuleId
+{
+    pub fn get(&self) -> &str 
+    {
+        &self.0
+    }
+
+    pub fn new(value: String) -> Self 
+    {
+        Self(value)
+    }
+}
+
+impl Display for ModuleId
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
+    {
+        write!(f, "{}", self.get())
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ExternalModuleData
@@ -29,7 +53,7 @@ pub enum ModuleValidationError
 {
     BibleNotFound
     {
-        name: String,
+        name: ModuleId,
     },
     RefIdError
     {
@@ -44,7 +68,12 @@ pub enum ModuleValidationError
     {
         id: EntryId,
     },
-    ReadingsModuleError(ReadingsModuleValidationError)
+    ReadingsModuleError(ReadingsModuleValidationError),
+    InvalidModuleId
+    {
+        id: ModuleId,
+        name: String,
+    }
 }
 
 impl From<ReadingsModuleValidationError> for ModuleValidationError
@@ -69,6 +98,7 @@ impl Display for ModuleValidationError
             Self::HtmlError { error } => write!(f, "{}", error),
             Self::EntryIdDuplicate { id } => write!(f, "Duplicate entries for id '{}'", id),
             Self::ReadingsModuleError(e) => write!(f, "{}", e),
+            Self::InvalidModuleId { id, name } => write!(f, "Invalid module id `{}` for module `{}`", id, name)
         }
     }
 }
@@ -233,8 +263,6 @@ impl Module
         }
     }
 
-
-
     pub fn name(&self) -> &str 
     {
         match self 
@@ -247,6 +275,41 @@ impl Module
             Module::Commentary(commentary_module) => &commentary_module.config.name,
             Module::Notebook(notebook_module) => &notebook_module.config.name,
             Module::Readings(reading) => &reading.config.name
+        }
+    }
+
+    pub fn short_name(&self) -> Option<&str>
+    {
+        match self 
+        {
+            Module::Bible(b) => b.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::Dictionary(d) => d.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::XRef(x) => x.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::StrongsDefs(d) => d.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::StrongsLinks(l) => l.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::Commentary(c) => c.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::Notebook(n) => n.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::Readings(r) => r.config.short_name.as_ref().map(|n| n.as_str()),
+        }
+    }
+
+    pub fn display_name(&self) -> &str
+    {
+        self.short_name().unwrap_or(self.name())
+    }
+
+    pub fn id(&self) -> &ModuleId 
+    {
+        match self 
+        {
+            Module::Bible(b) => &b.config.id,
+            Module::Dictionary(d) => &d.config.id,
+            Module::XRef(x) => &x.config.id,
+            Module::StrongsDefs(d) => &d.config.id,
+            Module::StrongsLinks(l) => &l.config.id,
+            Module::Commentary(c) => &c.config.id,
+            Module::Notebook(n) => &n.config.id,
+            Module::Readings(r) => &r.config.id,
         }
     }
 
@@ -337,7 +400,17 @@ impl Module
             Module::Commentary(commentary) => commentary.validate(builder),
             Module::Notebook(notebook_module) => notebook_module.validate(builder),
             Module::Readings(readings_module) => readings_module.validate(builder),
+        }?;
+
+        if !self.id().get().chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(vec![ModuleValidationError::InvalidModuleId { 
+                id: self.id().clone(), 
+                name: self.name().to_owned()
+            }])
         }
+
+        Ok(())
     }
 
     pub fn has_entry(&self, entry: EntryId) -> bool
@@ -506,6 +579,6 @@ impl<'a> ModuleEntry<'a>
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModuleEntryRef
 {
-    pub module: String,
+    pub module: ModuleId,
     pub entry_id: EntryId,
 }

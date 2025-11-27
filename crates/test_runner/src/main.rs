@@ -1,4 +1,4 @@
-use biblio_json::{Package, modules::{Module, readings::date::{ReadingsDate, ReadingsMonth}}};
+use biblio_json::{Package, modules::{Module, ModuleId}};
 use itertools::Itertools;
 
 fn main()
@@ -12,7 +12,7 @@ fn main()
         Err(e) => return println!("Package loaded with errors:\n{}\n", e.iter().join("\n"))
     };
     
-    let module = package.get_mod("Adam Clarke Bible Commentary")
+    let module = package.get_mod(&ModuleId::new("adam_clarke_bible_commentary".into()))
         .map(Module::as_commentary)
         .flatten()
         .unwrap();

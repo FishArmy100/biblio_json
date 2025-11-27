@@ -8,7 +8,7 @@ use flate2::Compression;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, notebook::NotebookModule, readings::ReadingsModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}, validation::ValidationContextBuilder};
+use crate::{core::{StrongsNumber, VerseId, WordRange}, html_text::HtmlText, modules::{ExternalModuleData, Module, ModuleEntry, ModuleEntryRef, ModuleId, ModuleValidationError, bible::{BibleModule, Verse}, commentary::CommentaryModule, dict::DictModule, notebook::NotebookModule, readings::ReadingsModule, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinksModule}, xrefs::XRefModule}, validation::ValidationContextBuilder};
 
 pub const PACKAGE_FILE_NAME: &str = "biblio-json.toml";
 
@@ -63,6 +63,10 @@ pub enum PackageLoadError
     ExpectedStem(String),
     PackagePathDoesNotExist(String),
     LoadPackageBinaryError(String),
+    DuplicateModuleId {
+        module_paths: Vec<String>,
+        id: ModuleId,
+    }
 }
 
 impl Display for PackageLoadError
@@ -90,6 +94,10 @@ impl Display for PackageLoadError
                 }
             },
             PackageLoadError::LoadPackageBinaryError(e) => write!(f, "Error when loading package binary: {}", e),
+            PackageLoadError::DuplicateModuleId { module_paths, id } => {
+                let paths = module_paths.iter().map(|p| format!(" - {}", p)).join("\n");
+                write!(f, "Multiple modules have the same id: {}:\n{}", id, paths)
+            },
         }
     }
 }
@@ -112,7 +120,7 @@ pub struct VerseFetchResponse
 pub struct Package 
 {
     pub config: PackageConfig,
-    pub modules: HashMap<String, Module>
+    pub modules: HashMap<ModuleId, Module>
 }
 
 impl Package
@@ -153,11 +161,11 @@ impl Package
 
         Ok(Self {
             config,
-            modules: modules.into_iter().map(|m| (m.name().to_owned(), m)).collect()
+            modules: modules.into_iter().map(|m| (m.id().clone(), m)).collect()
         })
     }
 
-    pub fn fetch(&self, verse_id: VerseId, bible: &str) -> Option<VerseFetchResponse>
+    pub fn fetch(&self, verse_id: VerseId, bible: &ModuleId) -> Option<VerseFetchResponse>
     {
         let bible = self.modules.get(bible).and_then(|v| v.as_bible())?;
         let verse = bible.source.verses.get(&verse_id)?;
@@ -169,7 +177,7 @@ impl Package
                     Some(FetchEntry {
                         range: WordRange::Single((i as u32 + 1).try_into().unwrap()), // convert from 0 to 1 based indexing
                         entry: ModuleEntryRef {
-                            module: dict.config.name.clone(),
+                            module: dict.config.id.clone(),
                             entry_id: entry.id
                         }
                     })
@@ -183,7 +191,7 @@ impl Package
 
         let xref_entries = self.modules.values()
             .filter_map(Module::as_xrefs)
-            .filter(|xrefs| xrefs.config.bible.as_ref().is_none_or(|b| *b == bible.config.name))
+            .filter(|xrefs| xrefs.config.bible.as_ref().is_none_or(|b| *b == bible.config.id))
             .flat_map(|xrefs| {
                 let entries = xrefs.entries.iter().filter(|r| r.has_verse(&verse_id)).collect_vec();
                 let mut result = Vec::new();
@@ -225,7 +233,7 @@ impl Package
                                 result.push(FetchEntry {
                                     range,
                                     entry: ModuleEntryRef {
-                                        module: xrefs.config.name.clone(),
+                                        module: xrefs.config.id.clone(),
                                         entry_id: entry.id(),
                                     },
                                 });
@@ -246,7 +254,7 @@ impl Package
                         result.push(FetchEntry {
                             range,
                             entry: ModuleEntryRef {
-                                module: xrefs.config.name.clone(),
+                                module: xrefs.config.id.clone(),
                                 entry_id: entry.id(),
                             },
                         });
@@ -258,7 +266,7 @@ impl Package
 
         let commentary_entries = self.modules.values()
             .filter_map(Module::as_commentary)
-            .filter(|commentary| commentary.config.bible.as_ref().is_none_or(|b| *b == bible.config.name))
+            .filter(|commentary| commentary.config.bible.as_ref().is_none_or(|b| *b == bible.config.id))
             .flat_map(|commentary| {
                 let entries = commentary.entries.iter().filter(|r| r.has_verse(&verse_id)).collect_vec();
                 let mut result = Vec::new();
@@ -295,7 +303,7 @@ impl Package
                                 result.push(FetchEntry {
                                     range,
                                     entry: ModuleEntryRef {
-                                        module: commentary.config.name.clone(),
+                                        module: commentary.config.id.clone(),
                                         entry_id: entry.id,
                                     },
                                 });
@@ -311,7 +319,7 @@ impl Package
                         result.push(FetchEntry {
                             range,
                             entry: ModuleEntryRef {
-                                module: commentary.config.name.clone(),
+                                module: commentary.config.id.clone(),
                                 entry_id: entry.id,
                             },
                         });
@@ -323,9 +331,9 @@ impl Package
 
         let strongs = self.modules.values()
             .filter_map(Module::as_strongs_links)
-            .find(|links| links.config.bible == bible.config.name)
+            .find(|links| links.config.bible == bible.config.id)
             .map(|links| links.get_links(&verse_id).map(|l| ModuleEntryRef { 
-                module: links.config.name.clone(),
+                module: links.config.id.clone(),
                 entry_id: l.id,
             }))
             .flatten();
@@ -395,12 +403,12 @@ impl Package
         Self::validate_modules(&bin.modules)?;
 
         Ok(Self {
-            modules: bin.modules.into_iter().map(|m| (m.name().to_owned(), m)).collect(),
+            modules: bin.modules.into_iter().map(|m| (m.id().clone(), m)).collect(),
             config: bin.config,
         })
     }
 
-    pub fn get_mod(&self, name: &str) -> Option<&Module>
+    pub fn get_mod(&self, name: &ModuleId) -> Option<&Module>
     {
         self.modules.get(name)
     }
@@ -410,7 +418,7 @@ impl Package
         let bibles = modules.iter().filter_map(|m| match m {
             Module::Bible(b) => Some(b.clone()),
             _ => None,
-        }).map(|b| (b.config.name.clone(), b)).collect::<HashMap<_, _>>();
+        }).map(|b| (b.config.id.clone(), b)).collect::<HashMap<_, _>>();
 
         let all_modules = modules.iter()
             .map(|m| (m.name().to_string(), m.clone()))
@@ -555,22 +563,34 @@ impl Package
             }
         }
 
+        let duplicates = modules.iter().map(|m| m.0.id()).duplicates().collect_vec();
+        for d in duplicates
+        {
+            errors.push(PackageLoadError::DuplicateModuleId { 
+                module_paths: modules.iter().filter_map(|(m, p)| match m.id() == d {
+                    true => Some(p.to_owned()),
+                    false => None,
+                }).collect(), 
+                id: d.clone()
+            });
+        }
+
         if errors.len() > 0
         {
             Err(errors)
         }
         else 
         {
-            Ok(modules)    
+            Ok(modules.into_iter().map(|(m, _)| m).collect())    
         }
     }
 
-    fn load_module(base_dir: &str, pattern: &str, f: impl Fn(&str, &str) -> Result<Module, String>) -> Result<Vec<Module>, PackageLoadError>
+    fn load_module(base_dir: &str, pattern: &str, f: impl Fn(&str, &str) -> Result<Module, String>) -> Result<Vec<(Module, String)>, PackageLoadError>
     {
         let full_path = format!("{}/{}", base_dir, pattern);
 
         let paths = glob::glob(&full_path).map_err(|e| PackageLoadError::GlobError(e.to_string()))?;
-        paths.filter_map(|entry| -> Option<Result<Module, PackageLoadError>> {
+        paths.filter_map(|entry| -> Option<Result<(Module, String), PackageLoadError>> {
             let entry = match entry {
                 Ok(ok) => ok,
                 Err(e) => return Some(Err(PackageLoadError::GlobError(e.to_string()))),
@@ -597,7 +617,7 @@ impl Package
             Some(f(dir, name).map_err(|e| PackageLoadError::ModuleLoadingError { 
                 path: path.canonicalize().ok().map(|p| p.display().to_string()).unwrap(), 
                 error: e
-            }))
+            }).map(|ok| (ok, path.display().to_string())))
         }).collect()
     }
 }

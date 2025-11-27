@@ -6,13 +6,15 @@ use std::{num::NonZeroU32, str::FromStr};
 use itertools::{Either, Itertools};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, readings::date::ReadingsDate}, utils, validation::ValidationContextBuilder};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleId, ModuleValidationError, readings::date::ReadingsDate}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "snake_case")]
 pub struct ReadingsConfig
 {
     pub name: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
     pub authors: Option<Vec<String>>,
     pub description: Option<HtmlText>,
     pub data_source: Option<String>,
@@ -203,7 +205,7 @@ impl ReadingsModule
 
     pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
-        let context = builder.build(Some(&self.config.name), &self.config.external);
+        let context = builder.build(Some(&self.config.id), &self.config.external);
         let mut errors = self.config.description.as_ref()
             .map(|d| d.validate(&context).err())
             .flatten()

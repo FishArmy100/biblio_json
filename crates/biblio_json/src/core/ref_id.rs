@@ -3,14 +3,14 @@ use std::fmt;
 use std::num::NonZeroU32;
 use std::str::FromStr;
 
-use crate::core::{OsisBook, VerseId};
+use crate::{core::{OsisBook, VerseId}, modules::ModuleId};
 
 // Gen.1.4-Gen.1.3:KJV
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RefId 
 {
-    pub bible: Option<String>,
+    pub bible: Option<ModuleId>,
     pub id: RefIdInner,
 }
 
@@ -494,7 +494,7 @@ impl FromStr for RefId
     {
         if let Some((id, bible)) = s.split_once(':') {
             Ok(Self {
-                bible: Some(bible.to_owned()),
+                bible: Some(ModuleId::new(bible.to_owned())),
                 id: RefIdInner::from_str(id)?
             })
         } 
