@@ -12,12 +12,12 @@ fn main()
         Err(e) => return println!("Package loaded with errors:\n{}\n", e.iter().join("\n"))
     };
     
-    let module = package.get_mod(&ModuleId::new("adam_clarke_bible_commentary".into()))
-        .map(Module::as_commentary)
+    let module = package.get_mod(&ModuleId::new("eastons_bible_dictionary".into()))
+        .map(Module::as_dict)
         .flatten()
         .unwrap();
 
-    println!("{}", module.entries[12].comment.to_html())
+    println!("{}", module.entries[12].definition.to_html())
     
     // let verse = VerseId::from_str("Gen.2.10").unwrap();
     // let fetch = package.fetch(verse, "KJV");

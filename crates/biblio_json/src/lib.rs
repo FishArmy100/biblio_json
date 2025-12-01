@@ -421,7 +421,7 @@ impl Package
         }).map(|b| (b.config.id.clone(), b)).collect::<HashMap<_, _>>();
 
         let all_modules = modules.iter()
-            .map(|m| (m.name().to_string(), m.clone()))
+            .map(|m| (m.id().clone(), m.clone()))
             .collect::<HashMap<_, _>>();
 
         let builder = ValidationContextBuilder {

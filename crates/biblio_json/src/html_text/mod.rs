@@ -139,7 +139,7 @@ pub enum HtmlValidationError
     },
     InvalidModuleAlias
     {
-        alias: ModuleId,
+        alias: String,
     },
     EntryIdDoesNotExist
     {
@@ -223,14 +223,14 @@ impl HtmlValidator {
                     HRefSrc::Strongs(_) => Ok(()),
                     HRefSrc::ModuleRef { module_alias, entry_id } => {
                         let aliases = &context.external.aliases;
-                        let Some(module_name) = aliases.get(module_alias) else {
+                        let Some(module_id) = aliases.get(module_alias) else {
                             return Err(HtmlValidationError::InvalidModuleAlias {
                                 alias: module_alias.clone(),
                             });
                         };
 
                         let all_modules = &context.all_modules;
-                        let Some(module) = all_modules.get(module_name) else {
+                        let Some(module) = all_modules.get(module_id) else {
                             return Err(HtmlValidationError::InvalidModuleAlias {
                                 alias: module_alias.clone(),
                             });
@@ -238,7 +238,7 @@ impl HtmlValidator {
 
                         if !module.has_entry(*entry_id) {
                             return Err(HtmlValidationError::EntryIdDoesNotExist {
-                                module_name: module_name.clone(),
+                                module_name: module.name().to_string(),
                                 entry_id: *entry_id,
                             });
                         }

@@ -234,7 +234,7 @@ pub enum HRefSrc {
     RefId(RefId),  // Simplified - replace with your RefId type
     Strongs(StrongsNumber), // Simplified - replace with your StrongsNumber type
     ModuleRef {
-        module_alias: ModuleId,
+        module_alias: String,
         entry_id: u32,
     },
 }
@@ -260,7 +260,7 @@ impl FromStr for HRefSrc
             let entry_id = captures.name("entry").unwrap().as_str().parse::<u32>()
                 .map_err(|e| format!("Invalid entry_id: {}", e))?;
             return Ok(Self::ModuleRef { 
-                module_alias: ModuleId::new(module_alias), 
+                module_alias, 
                 entry_id 
             });
         }

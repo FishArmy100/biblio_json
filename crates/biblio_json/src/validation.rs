@@ -24,7 +24,7 @@ impl std::fmt::Display for RefIdValidationError
 pub struct ValidationContextBuilder<'a>
 {
     pub bibles: &'a HashMap<ModuleId, Arc<BibleModule>>,
-    pub all_modules: &'a HashMap<String, Module>,
+    pub all_modules: &'a HashMap<ModuleId, Module>,
 }
 
 impl<'a> ValidationContextBuilder<'a>
@@ -45,7 +45,7 @@ impl<'a> ValidationContextBuilder<'a>
 pub struct ValidationContext<'a>
 {
     pub bibles: &'a HashMap<ModuleId, Arc<BibleModule>>,
-    pub all_modules: &'a HashMap<String, Module>,
+    pub all_modules: &'a HashMap<ModuleId, Module>,
     pub default_bible: Option<&'a ModuleId>,
     pub external: &'a ExternalModuleData,
 }

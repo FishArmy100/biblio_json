@@ -9,6 +9,7 @@ pub mod readings;
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use bible::BibleModule;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
@@ -43,7 +44,7 @@ impl Display for ModuleId
 pub struct ExternalModuleData
 {
     #[serde(default)]
-    pub aliases: HashMap<ModuleId, String>,
+    pub aliases: HashMap<String, ModuleId>,
     #[serde(default)]
     pub assets: HashMap<AssetIdName, String>,
 }
@@ -73,6 +74,10 @@ pub enum ModuleValidationError
     {
         id: ModuleId,
         name: String,
+    },
+    ModuleIdDoesNotExist
+    {
+        id: ModuleId,
     }
 }
 
@@ -98,7 +103,8 @@ impl Display for ModuleValidationError
             Self::HtmlError { error } => write!(f, "{}", error),
             Self::EntryIdDuplicate { id } => write!(f, "Duplicate entries for id '{}'", id),
             Self::ReadingsModuleError(e) => write!(f, "{}", e),
-            Self::InvalidModuleId { id, name } => write!(f, "Invalid module id `{}` for module `{}`", id, name)
+            Self::InvalidModuleId { id, name } => write!(f, "Invalid module id `{}` for module `{}`", id, name),
+            Self::ModuleIdDoesNotExist { id } => write!(f, "Module id {} does not exist", id),
         }
     }
 }
@@ -408,6 +414,23 @@ impl Module
                 id: self.id().clone(), 
                 name: self.name().to_owned()
             }])
+        }
+
+        let errors = self.external().aliases.iter().filter_map(|(_, id)|{
+            if !builder.all_modules.contains_key(id)
+            {
+                Some(ModuleValidationError::ModuleIdDoesNotExist { id: id.clone() })
+            }
+            else 
+            {
+                None
+            }
+        })
+        .collect_vec();
+
+        if errors.len() > 0
+        {
+            return Err(errors)
         }
 
         Ok(())
