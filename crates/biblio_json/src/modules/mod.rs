@@ -49,9 +49,23 @@ pub struct ExternalModuleData
     pub assets: HashMap<AssetIdName, String>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModuleType
+{
+    Bible,
+    Notebook,
+    Readings,
+    StrongsDefs,
+    StrongsLinks,
+    Commentary,
+    Dictionary,
+    CrossRefs
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleInfo
 {
+    pub module_type: ModuleType,
     pub name: String,
     pub id: ModuleId,
     pub short_name: Option<String>,
@@ -438,9 +452,25 @@ impl Module
         }
     }
 
+    pub fn get_type(&self) -> ModuleType
+    {
+        match self 
+        {
+            Module::Bible(_) => ModuleType::Bible,
+            Module::Dictionary(_) => ModuleType::Dictionary,
+            Module::XRef(_) => ModuleType::CrossRefs,
+            Module::StrongsDefs(_) => ModuleType::StrongsDefs,
+            Module::StrongsLinks(_) => ModuleType::StrongsLinks,
+            Module::Commentary(_) => ModuleType::Commentary,
+            Module::Notebook(_) => ModuleType::Notebook,
+            Module::Readings(_) => ModuleType::Readings,
+        }
+    }
+
     pub fn get_info(&self) -> ModuleInfo
     {
         ModuleInfo { 
+            module_type: self.get_type(),
             name: self.name().to_string(), 
             id: self.id().clone(), 
             short_name: self.short_name().map(|s| s.to_string()), 
