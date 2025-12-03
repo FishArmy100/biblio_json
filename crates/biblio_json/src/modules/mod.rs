@@ -49,6 +49,20 @@ pub struct ExternalModuleData
     pub assets: HashMap<AssetIdName, String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ModuleInfo
+{
+    pub name: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
+    pub description: Option<HtmlText>,
+    pub authors: Option<Vec<String>>,
+    pub language: Option<Language>,
+    pub data_source: Option<String>,
+    pub pub_year: Option<u32>,
+    pub license: Option<String>,
+}
+
 #[derive(Debug)]
 pub enum ModuleValidationError
 {
@@ -391,6 +405,51 @@ impl Module
             Module::Commentary(commentary_module) => &commentary_module.config.external,
             Module::Notebook(notebook_module) => &notebook_module.config.external,
             Module::Readings(readings_module) => &readings_module.config.external,
+        }
+    }
+
+    pub fn data_source(&self) -> Option<&str>
+    {
+        match self 
+        {
+            Module::Bible(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::Dictionary(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::XRef(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::StrongsDefs(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::StrongsLinks(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::Commentary(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::Notebook(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::Readings(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+        }
+    }
+
+    pub fn license(&self) -> Option<&str>
+    {
+        match self 
+        {
+            Module::Bible(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::Dictionary(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::XRef(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::StrongsDefs(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::StrongsLinks(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::Commentary(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::Notebook(_) => None,
+            Module::Readings(m) => m.config.license.as_ref().map(|s| s.as_str()),
+        }
+    }
+
+    pub fn get_info(&self) -> ModuleInfo
+    {
+        ModuleInfo { 
+            name: self.name().to_string(), 
+            id: self.id().clone(), 
+            short_name: self.short_name().map(|s| s.to_string()), 
+            description: self.description().cloned(), 
+            authors: self.authors().cloned(), 
+            language: self.language(), 
+            data_source: self.data_source().map(|s| s.to_string()), 
+            pub_year: self.pub_year(), 
+            license: self.license().map(|s| s.to_string()),
         }
     }
 
