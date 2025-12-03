@@ -193,7 +193,7 @@ impl Package
             .filter_map(Module::as_xrefs)
             .filter(|xrefs| xrefs.config.bible.as_ref().is_none_or(|b| *b == bible.config.id))
             .flat_map(|xrefs| {
-                let entries = xrefs.entries.iter().filter(|r| r.has_verse(&verse_id)).collect_vec();
+                let entries = xrefs.entries.iter().filter(|r| r.has_verse(verse_id)).collect_vec();
                 let mut result = Vec::new();
                 for entry in entries 
                 {
@@ -202,7 +202,7 @@ impl Package
                     for (i, _) in verse.words.iter().enumerate() 
                     {
                         let word_index = (i as u32 + 1).try_into().unwrap();
-                        if entry.has_verse_word(&verse_id, word_index) 
+                        if entry.has_verse_word(verse_id, word_index) 
                         {
                             covered.push(word_index);
                         }
@@ -268,7 +268,7 @@ impl Package
             .filter_map(Module::as_commentary)
             .filter(|commentary| commentary.config.bible.as_ref().is_none_or(|b| *b == bible.config.id))
             .flat_map(|commentary| {
-                let entries = commentary.entries.iter().filter(|r| r.has_verse(&verse_id)).collect_vec();
+                let entries = commentary.entries.iter().filter(|r| r.has_verse(verse_id)).collect_vec();
                 let mut result = Vec::new();
                 for entry in entries 
                 {
@@ -276,7 +276,7 @@ impl Package
                     for (i, _) in verse.words.iter().enumerate() 
                     {
                         let word_index = (i as u32 + 1).try_into().unwrap();
-                        if entry.has_verse_word(&verse_id, word_index) {
+                        if entry.has_verse_word(verse_id, word_index) {
                             covered.push(word_index);
                         }
                     }

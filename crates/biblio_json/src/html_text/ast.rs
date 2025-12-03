@@ -4,7 +4,7 @@ use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, StrongsNumber}, modules::ModuleId};
+use crate::core::{RefId, StrongsNumber};
 
 lazy_static::lazy_static! {
     static ref HREF_MODULE_ENTRY_REGEX: Regex = Regex::new("^(?P<module>[a-zA-Z_][a-zA-Z_0-9]*):(?P<entry>\\d+)$").unwrap();

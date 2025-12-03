@@ -22,7 +22,7 @@ use std::{fmt, str::FromStr};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::RefId, html_text::{ast::{AssetIdName, HRefSrc, Node}, lex::Lexer, parse::Parser}, modules::{EntryId, ModuleId}, validation::{RefIdValidationError, ValidationContext}};
+use crate::{core::RefId, html_text::{ast::{HRefSrc, Node}, lex::Lexer, parse::Parser}, modules::EntryId, validation::{RefIdValidationError, ValidationContext}};
 
 pub mod lex;
 pub mod parse;

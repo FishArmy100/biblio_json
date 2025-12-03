@@ -126,12 +126,12 @@ impl CommentaryEntry
         Ok(ret)
     }
 
-    pub fn has_verse(&self, verse: &VerseId) -> bool
+    pub fn has_verse(&self, verse: VerseId) -> bool
     {
         self.references.iter().any(|r| r.has_verse(verse))
     }
 
-    pub fn has_verse_word(&self, verse: &VerseId, word: NonZeroU32) -> bool
+    pub fn has_verse_word(&self, verse: VerseId, word: NonZeroU32) -> bool
     {
         self.references.iter().any(|r| r.has_verse_word(verse, word))
     }

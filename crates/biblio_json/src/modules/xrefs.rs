@@ -58,7 +58,7 @@ impl XRefEntry
         Ok(ret)
     }
 
-    pub fn has_verse(&self, verse: &VerseId) -> bool
+    pub fn has_verse(&self, verse: VerseId) -> bool
     {
         match self 
         {
@@ -67,7 +67,7 @@ impl XRefEntry
         }
     }
 
-    pub fn has_verse_word(&self, verse: &VerseId, word: NonZeroU32) -> bool
+    pub fn has_verse_word(&self, verse: VerseId, word: NonZeroU32) -> bool
     {
         match self 
         {
