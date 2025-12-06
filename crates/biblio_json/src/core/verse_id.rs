@@ -197,8 +197,10 @@ impl<'a> Iterator for VerseRangeIter<'a>
 {
     type Item = VerseId;
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current > self.end {
+    fn next(&mut self) -> Option<Self::Item> 
+    {
+        if self.current > self.end 
+        {
             return None;
         }
 
