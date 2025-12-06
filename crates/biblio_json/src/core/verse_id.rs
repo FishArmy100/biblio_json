@@ -3,7 +3,7 @@ use std::{num::NonZeroU32, str::FromStr};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::core::OsisBook;
+use crate::{core::OsisBook, modules::bible::BookInfo};
 
 lazy_static::lazy_static!
 {
@@ -16,6 +16,93 @@ pub struct VerseId
     pub book: OsisBook,
     pub chapter: NonZeroU32,
     pub verse: NonZeroU32,
+}
+
+impl VerseId
+{
+    pub fn new(book: OsisBook, chapter: NonZeroU32, verse: NonZeroU32) -> Self 
+    {
+        Self
+        {
+            book,
+            chapter,
+            verse,
+        }
+    }
+
+    pub fn flatten(self, books: &[BookInfo]) -> u32 
+    {
+        // Find the book info
+        let book_info = books
+            .iter()
+            .find(|b| b.osis_book == self.book)
+            .expect("Book not found");
+
+        // Compute verses in all previous books
+        let mut index = 0u32;
+        for b in books 
+        {
+            if b.osis_book == self.book 
+            {
+                break;
+            }
+            index += b.chapters.iter().sum::<u32>();
+        }
+
+        // Compute verses in previous chapters
+        let chapter_idx = (self.chapter.get() - 1) as usize;
+        index += book_info.chapters[..chapter_idx].iter().sum::<u32>();
+
+        // Add verse (minus 1 because flatten is 0-based)
+        index += self.verse.get() - 1;
+
+        index
+    }
+
+    pub fn expand(books: &[BookInfo], mut index: u32) -> Self 
+    {
+        // Find book by subtracting book sizes
+        let mut book_info = None;
+
+        for b in books 
+        {
+            let book_verse_count: u32 = b.chapters.iter().sum();
+            if index < book_verse_count 
+            {
+                book_info = Some(b);
+                break;
+            } 
+            else 
+            {
+                index -= book_verse_count;
+            }
+        }
+
+        let book_info = book_info.expect("Index out of range");
+
+        // Find chapter by subtracting chapter sizes
+        let mut chapter_num = 1u32;
+        for &count in &book_info.chapters 
+        {
+            if index < count 
+            {
+                break;
+            } 
+            else 
+            {
+                index -= count;
+                chapter_num += 1;
+            }
+        }
+
+        let verse_num = index + 1; // convert from 0-based to 1-based
+
+        VerseId {
+            book: book_info.osis_book,
+            chapter: NonZeroU32::new(chapter_num).unwrap(),
+            verse: NonZeroU32::new(verse_num).unwrap(),
+        }
+    }
 }
 
 impl std::fmt::Display for VerseId
@@ -75,6 +162,49 @@ impl<'de> Deserialize<'de> for VerseId
     {
         let s = String::deserialize(deserializer)?;
         Self::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+pub struct VerseRangeIter<'a>
+{
+    books: &'a [BookInfo],
+    current: u32,
+    end: u32,
+}
+
+impl<'a> VerseRangeIter<'a>
+{
+    pub fn from_flat(books: &'a [BookInfo], from: u32, to: u32) -> Self 
+    {
+        Self {
+            books,
+            current: from,
+            end: to,
+        }
+    }
+
+    pub fn from_verses(books: &'a [BookInfo], from: VerseId, to: VerseId) -> Self 
+    {
+        Self {
+            books,
+            current: from.flatten(books),
+            end: to.flatten(books)
+        }
+    }
+}
+
+impl<'a> Iterator for VerseRangeIter<'a> 
+{
+    type Item = VerseId;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current > self.end {
+            return None;
+        }
+
+        let v = VerseId::expand(self.books, self.current);
+        self.current += 1;
+        Some(v)
     }
 }
 
