@@ -14,7 +14,7 @@ pub enum StrongsLang
     Greek,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct StrongsNumber
 {
     pub lang: StrongsLang,

@@ -7,7 +7,7 @@ use crate::{core::OsisBook, modules::bible::BookInfo};
 
 lazy_static::lazy_static!
 {
-    static ref VERSE_ID_REGEX: Regex = Regex::new("^(?P<book>[\\d*a-zA-Z]+).(?P<chapter>[1-9]\\d*).(?P<verse>[1-9]\\d*)$").unwrap();
+    static ref VERSE_ID_REGEX: Regex = Regex::new("^(?P<book>[\\d*a-zA-Z]+)\\.(?P<chapter>[1-9]\\d*)\\.(?P<verse>[1-9]\\d*)$").unwrap();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

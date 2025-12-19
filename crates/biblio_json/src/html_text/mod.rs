@@ -27,6 +27,7 @@ use crate::{core::RefId, html_text::{ast::{HRefSrc, Node}, lex::Lexer, parse::Pa
 pub mod lex;
 pub mod parse;
 pub mod ast;
+pub mod html_iter;
 
 
 #[derive(Debug, Clone, PartialEq)]
