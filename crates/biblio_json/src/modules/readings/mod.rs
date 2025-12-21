@@ -26,7 +26,7 @@ pub struct ReadingsConfig
     pub external: ExternalModuleData,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum LeapYearHandler
 {
     Skip,
@@ -86,7 +86,7 @@ impl<'de> Deserialize<'de> for LeapYearHandler
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "snake_case", tag = "type")]
 pub enum ReadingsFormat
 {
