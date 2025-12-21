@@ -75,6 +75,7 @@ pub struct ModuleInfo
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
     pub license: Option<String>,
+    pub external: ExternalModuleData,
 }
 
 #[derive(Debug)]
@@ -480,6 +481,7 @@ impl Module
             data_source: self.data_source().map(|s| s.to_string()), 
             pub_year: self.pub_year(), 
             license: self.license().map(|s| s.to_string()),
+            external: self.external().clone(),
         }
     }
 
