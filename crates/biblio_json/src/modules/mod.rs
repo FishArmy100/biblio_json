@@ -485,6 +485,21 @@ impl Module
         }
     }
 
+    pub fn entries(&'_ self) ->  Box<dyn Iterator<Item = ModuleEntry<'_>> + '_>
+    {
+        match self 
+        {
+            Module::Bible(m) => Box::new(m.source.verses.values().map(|v| ModuleEntry::Verse(v))),
+            Module::Dictionary(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::Dictionary(e))),
+            Module::XRef(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::XRef(e))),
+            Module::StrongsDefs(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::StrongsDef(e))),
+            Module::StrongsLinks(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::StrongsLink(e))),
+            Module::Commentary(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::Commentary(e))),
+            Module::Notebook(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::Notebook(e))),
+            Module::Readings(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::Readings(e))),
+        }
+    }
+
     pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
         match self 
