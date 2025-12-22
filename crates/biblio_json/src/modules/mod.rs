@@ -703,6 +703,21 @@ impl<'a> ModuleEntry<'a>
             _ => None,
         }
     }
+
+    pub fn id(&self) -> EntryId
+    {
+        match self 
+        {
+            ModuleEntry::Dictionary(e) => e.id,
+            ModuleEntry::StrongsDef(e) => e.id,
+            ModuleEntry::StrongsLink(e) => e.id,
+            ModuleEntry::XRef(e) => e.id(),
+            ModuleEntry::Commentary(e) => e.id,
+            ModuleEntry::Verse(e) => e.id,
+            ModuleEntry::Notebook(e) => e.id(),
+            ModuleEntry::Readings(e) => e.id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
