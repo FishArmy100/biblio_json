@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{ops::Deref, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
@@ -40,6 +40,16 @@ impl Language
     pub fn autonym(&self) -> Option<&'static str>
     {
         self.0.to_autonym()
+    }
+}
+
+impl Deref for Language
+{
+    type Target = isolang::Language;
+
+    fn deref(&self) -> &Self::Target 
+    {
+        &self.0
     }
 }
 
