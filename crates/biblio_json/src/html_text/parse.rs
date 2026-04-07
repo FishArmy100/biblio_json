@@ -1,6 +1,6 @@
 use std::{collections::HashMap, str::FromStr};
 
-use crate::html_text::{ErrorKind, HtmlText, ParseError, ast::{AssetIdName, HRefSrc, Node}, lex::Token};
+use crate::html_text::{ErrorKind, HtmlText, ParseError, ast::{AssetIdName, HRefSrc, HeadingLevel, Node}, lex::Token};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Context {
@@ -135,7 +135,7 @@ impl Parser {
                             self.next();
                             nodes.push(Node::HorizontalRule);
                         }
-                        (Context::Paragraph | Context::Heading | Context::ListItem | Context::Inline, "br") => {
+                        (Context::Document | Context::Paragraph | Context::Heading | Context::ListItem | Context::Inline, "br") => {
                             self.next();
                             nodes.push(Node::LineBreak);
                         }
@@ -203,7 +203,12 @@ impl Parser {
             }
         };
 
-        let content = self.parse_nodes(Context::Heading, Some(&format!("h{}", level)))?;
+        let level = HeadingLevel::try_from(level).map_err(|_| ParseError {
+            kind: ErrorKind::UnexpectedToken(format!("h{}", level)),
+            pos: start_pos,
+        })?;
+
+        let content = self.parse_nodes(Context::Heading, Some(&format!("h{}", level.to_u8())))?;
         Ok(Node::Heading { level, content })
     }
 

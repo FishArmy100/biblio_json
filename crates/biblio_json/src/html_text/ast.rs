@@ -4,18 +4,111 @@ use itertools::Itertools;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
-use crate::core::{RefId, StrongsNumber, VerseId};
+use crate::core::{RefId, StrongsNumber};
 
 lazy_static::lazy_static! {
     static ref HREF_MODULE_ENTRY_REGEX: Regex = Regex::new("^(?P<module>[a-zA-Z_][a-zA-Z_0-9]*):(?P<entry>\\d+)$").unwrap();
     static ref IMAGE_REF_REGEX: Regex = Regex::new("^[a-zA-Z_][a-zA-Z_0-9]*$").unwrap();
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum HeadingLevel 
+{
+    H1,
+    H2,
+    H3,
+}
+
+impl HeadingLevel
+{
+    pub fn to_u8(self) -> u8
+    {
+        self.into()
+    }
+}
+
+impl TryFrom<u8> for HeadingLevel
+{
+    type Error = String;
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> 
+    {
+        match value 
+        {
+            1 => Ok(Self::H1),
+            2 => Ok(Self::H2),
+            3 => Ok(Self::H3),
+            _ => Err(format!("'{}' is not a valid header size",  value))
+        }
+    }
+}
+
+impl TryFrom<&u8> for HeadingLevel
+{
+    type Error = String;
+
+    fn try_from(value: &u8) -> Result<Self, Self::Error> 
+    {
+        match value 
+        {
+            1 => Ok(Self::H1),
+            2 => Ok(Self::H2),
+            3 => Ok(Self::H3),
+            _ => Err(format!("'{}' is not a valid header size", value))
+        }
+    }
+}
+
+impl From<HeadingLevel> for u8 
+{
+    fn from(value: HeadingLevel) -> Self 
+    {
+        match value 
+        {
+            HeadingLevel::H1 => 1,
+            HeadingLevel::H2 => 2,
+            HeadingLevel::H3 => 3,
+        }
+    }
+}
+
+impl From<&HeadingLevel> for u8 
+{
+    fn from(value: &HeadingLevel) -> Self 
+    {
+        match value 
+        {
+            HeadingLevel::H1 => 1,
+            HeadingLevel::H2 => 2,
+            HeadingLevel::H3 => 3,
+        }
+    }
+}
+
+impl Serialize for HeadingLevel
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: serde::Serializer 
+    {
+        serializer.serialize_u8(self.into())
+    }
+}
+
+impl<'de> Deserialize<'de> for HeadingLevel
+{
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where D: serde::Deserializer<'de> 
+    {
+        let level = u8::deserialize(deserializer)?;
+        HeadingLevel::try_from(level).map_err(serde::de::Error::custom)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Node {
     // Block-level elements
     Paragraph(Vec<Node>),
-    Heading { level: u8, content: Vec<Node> },
+    Heading { level: HeadingLevel, content: Vec<Node> },
     List { ordered: bool, items: Vec<Node> },
     ListItem(Vec<Node>),
     HorizontalRule,
@@ -55,7 +148,7 @@ impl Node {
                 format!("<p>{}</p>", children.iter().map(Node::to_html).join(""))
             }
             Node::Heading { level, content } => {
-                format!("<h{l}>{}</h{l}>", content.iter().map(Node::to_html).join(""), l = level)
+                format!("<h{l}>{}</h{l}>", content.iter().map(Node::to_html).join(""), l = level.to_u8())
             }
             Node::List { ordered, items } => {
                 let tag = if *ordered { "ol" } else { "ul" };
@@ -141,7 +234,7 @@ pub enum HRefSrc {
     RefId(RefId),  // Simplified - replace with your RefId type
     Strongs(StrongsNumber), // Simplified - replace with your StrongsNumber type
     ModuleRef {
-        module_alias: AssetIdName,
+        module_alias: String,
         entry_id: u32,
     },
 }
@@ -167,7 +260,7 @@ impl FromStr for HRefSrc
             let entry_id = captures.name("entry").unwrap().as_str().parse::<u32>()
                 .map_err(|e| format!("Invalid entry_id: {}", e))?;
             return Ok(Self::ModuleRef { 
-                module_alias: AssetIdName::from_str(&module_alias)?, 
+                module_alias, 
                 entry_id 
             });
         }

@@ -3,14 +3,16 @@ use std::num::NonZeroU32;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, ValidationContext}, utils, validation::ValidationContextBuilder};
+use crate::{core::{RefId, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleId, ModuleValidationError}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct CommentaryConfig
 {
     pub name: String,
-    pub bible: Option<String>,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
+    pub bible: Option<ModuleId>,
     pub authors: Option<Vec<String>>,
     pub language: Option<Language>,
     pub description: Option<HtmlText>,
@@ -46,7 +48,7 @@ impl CommentaryModule
 
     pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
-        let context = builder.build(self.config.bible.as_ref().map(|e| e.as_str()), &self.config.external);
+        let context = builder.build(self.config.bible.as_ref(), &self.config.external);
 
         if let Some(bible) = self.config.bible.as_ref()
         {
@@ -116,20 +118,20 @@ impl CommentaryEntry
 {
     pub fn from_file(path: &str) -> Result<Vec<Self>, String>
     {
-        let ret = utils::load_json_lines(path)?
+        let ret = utils::load_json_lines(path).stringify_error()?
             .into_iter()
-            .map(|(l, _)| l)
+            .map(|l| l.value)
             .collect();
 
         Ok(ret)
     }
 
-    pub fn has_verse(&self, verse: &VerseId) -> bool
+    pub fn has_verse(&self, verse: VerseId) -> bool
     {
         self.references.iter().any(|r| r.has_verse(verse))
     }
 
-    pub fn has_verse_word(&self, verse: &VerseId, word: NonZeroU32) -> bool
+    pub fn has_verse_word(&self, verse: VerseId, word: NonZeroU32) -> bool
     {
         self.references.iter().any(|r| r.has_verse_word(verse, word))
     }

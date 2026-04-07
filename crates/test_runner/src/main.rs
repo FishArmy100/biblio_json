@@ -1,6 +1,4 @@
-use std::{fs, str::FromStr};
-
-use biblio_json::{Package, core::{OsisBook, VerseId}};
+use biblio_json::{Package, modules::{Module, ModuleId}};
 use itertools::Itertools;
 
 fn main()
@@ -14,9 +12,16 @@ fn main()
         Err(e) => return println!("Package loaded with errors:\n{}\n", e.iter().join("\n"))
     };
     
-    let verse = VerseId::from_str("Gen.2.10").unwrap();
-    let fetch = package.fetch(verse, "KJV");
-    println!("{:#?}", fetch);
+    let module = package.get_mod(&ModuleId::new("eastons_bible_dictionary".into()))
+        .map(Module::as_dict)
+        .flatten()
+        .unwrap();
+
+    println!("{}", module.entries[12].definition.to_html())
+    
+    // let verse = VerseId::from_str("Gen.2.10").unwrap();
+    // let fetch = package.fetch(verse, "KJV");
+    // println!("{:#?}", fetch);
 
     // let bible = package.get_mod("KJV").unwrap().as_bible().unwrap();
     // let abbrev = bible.get_abbreviated_book(OsisBook::John);

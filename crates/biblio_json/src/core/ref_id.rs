@@ -3,20 +3,20 @@ use std::fmt;
 use std::num::NonZeroU32;
 use std::str::FromStr;
 
-use crate::core::{OsisBook, VerseId};
+use crate::{core::{ChapterId, OsisBook, VerseId}, modules::ModuleId};
 
 // Gen.1.4-Gen.1.3:KJV
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RefId 
 {
-    pub bible: Option<String>,
+    pub bible: Option<ModuleId>,
     pub id: RefIdInner,
 }
 
 impl RefId
 {
-    pub fn has_verse_word(&self, verse_id: &VerseId, word_id: NonZeroU32) -> bool 
+    pub fn has_verse_word(&self, verse_id: VerseId, word_id: NonZeroU32) -> bool 
     {
         self.id.has_verse_word(verse_id, word_id)
     }
@@ -28,10 +28,25 @@ impl RefId
     /// ref_id::from_str("Gen.1.1-Gen.1.5").unwrap().has_verse(verse_id); // true
     /// ref_id::from_str("Gen.1.2-Gen.1.5").unwrap().has_verse(verse_id); // false
     /// ```
-    pub fn has_verse(&self, verse_id: &VerseId) -> bool
+    pub fn has_verse(&self, verse_id: VerseId) -> bool
     {
         self.id.has_verse(verse_id)
     } 
+
+    pub fn has_chapter(&self, chapter_id: ChapterId) -> bool
+    {
+        self.id.has_chapter(chapter_id)
+    }
+
+    pub fn has_book(&self, book: OsisBook) -> bool
+    {
+        self.id.has_book(book)
+    }
+
+    pub fn has_ref_id(&self, other: &Self) -> bool
+    {
+        self.id.has_ref_id_inner(other.id)
+    }
 
     pub fn from_verse_id(verse: VerseId, word: Option<NonZeroU32>) -> Self
     {
@@ -81,7 +96,27 @@ pub enum RefIdInner
 
 impl RefIdInner
 {
-    pub fn has_verse_word(&self, verse_id: &VerseId, word_id: NonZeroU32) -> bool 
+    pub fn has_ref_id_inner(&self, ref_id: RefIdInner) -> bool
+    {
+        match ref_id 
+        {
+            RefIdInner::Single(atom) => self.has_atom(atom),
+            RefIdInner::Range { from, to } => self.has_atom(from) && self.has_atom(to),
+        }
+    }
+
+    pub fn has_atom(&self, atom: Atom) -> bool
+    {
+        match atom 
+        {
+            Atom::Book { book } => self.has_book(book),
+            Atom::Chapter { book, chapter } => self.has_chapter(ChapterId { book, chapter }),
+            Atom::Verse { book, chapter, verse } => self.has_verse(VerseId { book, chapter, verse }),
+            Atom::Word { book, chapter, verse, word } => self.has_verse_word(VerseId { book, chapter, verse }, word),
+        }
+    }
+
+    pub fn has_verse_word(&self, verse_id: VerseId, word_id: NonZeroU32) -> bool 
     {
         match self 
         { 
@@ -150,7 +185,7 @@ impl RefIdInner
     /// ref_id::from_str("Gen.1.1-Gen.1.5").unwrap().has_verse(verse_id); // true
     /// ref_id::from_str("Gen.1.2-Gen.1.5").unwrap().has_verse(verse_id); // false
     /// ```
-    pub fn has_verse(&self, verse_id: &VerseId) -> bool 
+    pub fn has_verse(&self, verse_id: VerseId) -> bool 
     {
         match self 
         { 
@@ -194,6 +229,50 @@ impl RefIdInner
                     } 
                 } true 
             }
+        }
+    }
+
+    pub fn has_chapter(&self, chapter_id: ChapterId) -> bool
+    {
+        match self 
+        { 
+            Self::Single(atom) => match atom 
+            { 
+                Atom::Book { book } => chapter_id.book == *book, 
+                Atom::Chapter { book, chapter } => chapter_id.book == *book && chapter_id.chapter == *chapter, 
+                Atom::Verse { book, chapter, .. } => chapter_id.book == *book && chapter_id.chapter == *chapter, 
+                Atom::Word { book, chapter, .. } => chapter_id.book == *book && chapter_id.chapter == *chapter, 
+            }, 
+            Self::Range { from, to } => 
+            { 
+                if chapter_id.book < from.book() || chapter_id.book > to.book() { return false; } 
+                if chapter_id.book == from.book() 
+                { 
+                    if let Some(chapter) = from.chapter() 
+                    { 
+                        if chapter_id.chapter < chapter { return false }
+                    } 
+                } 
+                
+                if chapter_id.book == to.book() 
+                { 
+                    if let Some(chapter) = to.chapter() 
+                    { 
+                        if chapter_id.chapter > chapter { return false }
+                    } 
+                } true 
+            }
+        }
+    }
+
+    pub fn has_book(&self, book: OsisBook) -> bool
+    {
+        match self 
+        {
+            RefIdInner::Single(atom) => atom.book() == book,
+            RefIdInner::Range { from, to } => {
+                book >= from.book() && book <= to.book()
+            },
         }
     }
 
@@ -494,7 +573,7 @@ impl FromStr for RefId
     {
         if let Some((id, bible)) = s.split_once(':') {
             Ok(Self {
-                bible: Some(bible.to_owned()),
+                bible: Some(ModuleId::new(bible.to_owned())),
                 id: RefIdInner::from_str(id)?
             })
         } 
@@ -621,7 +700,7 @@ mod tests {
     {
         let ref_id = RefId::from_str("Gen.1.1-Gen.1.5").unwrap();
         let verse_id = VerseId::from_str("Gen.1.3").unwrap();
-        assert!(ref_id.has_verse(&verse_id));
+        assert!(ref_id.has_verse(verse_id));
     }
 
     #[test]
@@ -629,7 +708,7 @@ mod tests {
     {
         let ref_id = RefId::from_str("Gen.1.2-Gen.1.5").unwrap();
         let verse_id = VerseId::from_str("Gen.1.1").unwrap();
-        assert!(!ref_id.has_verse(&verse_id));
+        assert!(!ref_id.has_verse(verse_id));
     }
 
     #[test]
@@ -637,7 +716,7 @@ mod tests {
     {
         let ref_id = RefId::from_str("Gen.1.1#2").unwrap();
         let verse_id = VerseId::from_str("Gen.1.1").unwrap();
-        assert!(ref_id.has_verse_word(&verse_id, nz(2)));
+        assert!(ref_id.has_verse_word(verse_id, nz(2)));
     }
 
     #[test]
@@ -645,7 +724,7 @@ mod tests {
     {
         let ref_id = RefId::from_str("Gen.1.1#2").unwrap();
         let verse_id = VerseId::from_str("Gen.1.1").unwrap();
-        assert!(!ref_id.has_verse_word(&verse_id, nz(3)));
+        assert!(!ref_id.has_verse_word(verse_id, nz(3)));
     }
 
     #[test]

@@ -1,6 +1,6 @@
 use std::{fs::{self, File}, io::Write, path::Path, str::FromStr, time::SystemTime};
 
-use biblio_json::{Package, PackageLoadError, core::VerseId};
+use biblio_json::{Package, PackageLoadError, core::VerseId, modules::ModuleId};
 use clap::{Parser, Subcommand};
 use itertools::Itertools;
 
@@ -109,7 +109,7 @@ fn main()
                 Err(_) => return println!("Verse id '{}' is not in the proper format", verse)
             };
 
-            match package.fetch(verse_id, &bible)
+            match package.fetch(verse_id, &ModuleId::new(bible.clone()))
             {
                 Some(result) => {
                     let result = format!("{:#?}", result);

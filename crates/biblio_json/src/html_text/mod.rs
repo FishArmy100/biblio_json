@@ -22,11 +22,12 @@ use std::{fmt, str::FromStr};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::RefId, html_text::{ast::{AssetIdName, HRefSrc, Node}, lex::Lexer, parse::Parser}, modules::EntryId, validation::{RefIdValidationError, ValidationContext}};
+use crate::{core::RefId, html_text::{ast::{HRefSrc, Node}, lex::Lexer, parse::Parser}, modules::EntryId, validation::{RefIdValidationError, ValidationContext}};
 
 pub mod lex;
 pub mod parse;
 pub mod ast;
+pub mod html_iter;
 
 
 #[derive(Debug, Clone, PartialEq)]
@@ -139,7 +140,7 @@ pub enum HtmlValidationError
     },
     InvalidModuleAlias
     {
-        alias: AssetIdName,
+        alias: String,
     },
     EntryIdDoesNotExist
     {
@@ -223,14 +224,14 @@ impl HtmlValidator {
                     HRefSrc::Strongs(_) => Ok(()),
                     HRefSrc::ModuleRef { module_alias, entry_id } => {
                         let aliases = &context.external.aliases;
-                        let Some(module_name) = aliases.get(module_alias) else {
+                        let Some(module_id) = aliases.get(module_alias) else {
                             return Err(HtmlValidationError::InvalidModuleAlias {
                                 alias: module_alias.clone(),
                             });
                         };
 
                         let all_modules = &context.all_modules;
-                        let Some(module) = all_modules.get(module_name) else {
+                        let Some(module) = all_modules.get(module_id) else {
                             return Err(HtmlValidationError::InvalidModuleAlias {
                                 alias: module_alias.clone(),
                             });
@@ -238,7 +239,7 @@ impl HtmlValidator {
 
                         if !module.has_entry(*entry_id) {
                             return Err(HtmlValidationError::EntryIdDoesNotExist {
-                                module_name: module_name.clone(),
+                                module_name: module.name().to_string(),
                                 entry_id: *entry_id,
                             });
                         }
@@ -284,13 +285,13 @@ mod tests {
 
     #[test]
     fn heading_levels() {
-        for level in 1..=6 {
+        for level in 1..=3 {
             let html = format!("<h{0}>Header {0}</h{0}>", level);
             let doc = parse_ok(&html);
             assert_eq!(
                 doc.nodes,
                 vec![Node::Heading {
-                    level,
+                    level: level.try_into().unwrap(),
                     content: vec![Node::Text(format!("Header {}", level))]
                 }]
             );

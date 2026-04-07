@@ -4,23 +4,78 @@ pub mod xrefs;
 pub mod strongs;
 pub mod commentary;
 pub mod notebook;
+pub mod readings;
 
 use std::{collections::HashMap, fmt::Display, sync::Arc};
 
 use bible::BibleModule;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 
-use crate::{ValidationContext, core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, notebook::{NotebookEntry, NotebookModule}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
+use crate::{core::{RefId, lang::Language}, html_text::{HtmlText, HtmlValidationError, ast::AssetIdName}, modules::{bible::Verse, commentary::{CommentaryEntry, CommentaryModule}, dict::{DictEntry, DictModule}, notebook::{NotebookEntry, NotebookModule}, readings::{ReadingsEntry, ReadingsModule, ReadingsModuleValidationError}, strongs::{StrongsDefEntry, StrongsDefsModule, StrongsLinkEntry, StrongsLinksModule}, xrefs::{XRefEntry, XRefModule}}, validation::{RefIdValidationError, ValidationContextBuilder}};
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct ModuleId(String);
+
+impl ModuleId
+{
+    pub fn get(&self) -> &str 
+    {
+        &self.0
+    }
+
+    pub fn new(value: String) -> Self 
+    {
+        Self(value)
+    }
+}
+
+impl Display for ModuleId
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result 
+    {
+        write!(f, "{}", self.get())
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct ExternalModuleData
 {
     #[serde(default)]
-    pub aliases: HashMap<AssetIdName, String>,
+    pub aliases: HashMap<String, ModuleId>,
     #[serde(default)]
     pub assets: HashMap<AssetIdName, String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ModuleType
+{
+    Bible,
+    Notebook,
+    Readings,
+    StrongsDefs,
+    StrongsLinks,
+    Commentary,
+    Dictionary,
+    CrossRefs
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleInfo
+{
+    pub module_type: ModuleType,
+    pub name: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
+    pub description: Option<HtmlText>,
+    pub authors: Option<Vec<String>>,
+    pub language: Option<Language>,
+    pub data_source: Option<String>,
+    pub pub_year: Option<u32>,
+    pub license: Option<String>,
+    pub external: ExternalModuleData,
 }
 
 #[derive(Debug)]
@@ -28,7 +83,7 @@ pub enum ModuleValidationError
 {
     BibleNotFound
     {
-        name: String,
+        name: ModuleId,
     },
     RefIdError
     {
@@ -42,6 +97,24 @@ pub enum ModuleValidationError
     EntryIdDuplicate
     {
         id: EntryId,
+    },
+    ReadingsModuleError(ReadingsModuleValidationError),
+    InvalidModuleId
+    {
+        id: ModuleId,
+        name: String,
+    },
+    ModuleIdDoesNotExist
+    {
+        id: ModuleId,
+    }
+}
+
+impl From<ReadingsModuleValidationError> for ModuleValidationError
+{
+    fn from(error: ReadingsModuleValidationError) -> Self 
+    {
+        Self::ReadingsModuleError(error)
     }
 }
 
@@ -58,6 +131,9 @@ impl Display for ModuleValidationError
             },
             Self::HtmlError { error } => write!(f, "{}", error),
             Self::EntryIdDuplicate { id } => write!(f, "Duplicate entries for id '{}'", id),
+            Self::ReadingsModuleError(e) => write!(f, "{}", e),
+            Self::InvalidModuleId { id, name } => write!(f, "Invalid module id `{}` for module `{}`", id, name),
+            Self::ModuleIdDoesNotExist { id } => write!(f, "Module id {} does not exist", id),
         }
     }
 }
@@ -73,6 +149,7 @@ pub enum Module
     StrongsLinks(#[serde_as(as = "Arc<_>")] Arc<StrongsLinksModule>),
     Commentary(#[serde_as(as = "Arc<_>")] Arc<CommentaryModule>),
     Notebook(#[serde_as(as = "Arc<_>")] Arc<NotebookModule>),
+    Readings(#[serde_as(as = "Arc<_>")] Arc<ReadingsModule>),
 }
 
 impl Module
@@ -203,6 +280,24 @@ impl Module
         }
     }
 
+    pub fn is_readings(&self) -> bool
+    {
+        match self 
+        {
+            Self::Readings(_) => true,
+            _ => false
+        }
+    }
+
+    pub fn as_readings(&self) -> Option<Arc<ReadingsModule>>
+    {
+        match self 
+        {
+            Self::Readings(r) => Some(r.clone()),
+            _ => None,
+        }
+    }
+
     pub fn name(&self) -> &str 
     {
         match self 
@@ -214,6 +309,42 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => &strongs_links_module.config.name,
             Module::Commentary(commentary_module) => &commentary_module.config.name,
             Module::Notebook(notebook_module) => &notebook_module.config.name,
+            Module::Readings(reading) => &reading.config.name
+        }
+    }
+
+    pub fn short_name(&self) -> Option<&str>
+    {
+        match self 
+        {
+            Module::Bible(b) => b.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::Dictionary(d) => d.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::XRef(x) => x.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::StrongsDefs(d) => d.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::StrongsLinks(l) => l.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::Commentary(c) => c.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::Notebook(n) => n.config.short_name.as_ref().map(|n| n.as_str()),
+            Module::Readings(r) => r.config.short_name.as_ref().map(|n| n.as_str()),
+        }
+    }
+
+    pub fn display_name(&self) -> &str
+    {
+        self.short_name().unwrap_or(self.name())
+    }
+
+    pub fn id(&self) -> &ModuleId 
+    {
+        match self 
+        {
+            Module::Bible(b) => &b.config.id,
+            Module::Dictionary(d) => &d.config.id,
+            Module::XRef(x) => &x.config.id,
+            Module::StrongsDefs(d) => &d.config.id,
+            Module::StrongsLinks(l) => &l.config.id,
+            Module::Commentary(c) => &c.config.id,
+            Module::Notebook(n) => &n.config.id,
+            Module::Readings(r) => &r.config.id,
         }
     }
 
@@ -228,6 +359,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.description.as_ref(),
             Module::Commentary(commentary_module) => commentary_module.config.description.as_ref(),
             Module::Notebook(notebook_module) => notebook_module.config.description.as_ref(),
+            Module::Readings(readings_module) => readings_module.config.description.as_ref(),
         }
     }
 
@@ -242,6 +374,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.language,
             Module::Commentary(commentary_module) => commentary_module.config.language,
             Module::Notebook(notebook_module) => notebook_module.config.language,
+            Module::Readings(readings_module) => readings_module.config.language,
         }
     }
 
@@ -256,6 +389,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.authors.as_ref(),
             Module::Commentary(commentary_module) => commentary_module.config.authors.as_ref(),
             Module::Notebook(notebook_module) => notebook_module.config.authors.as_ref(),
+            Module::Readings(readings_module) => readings_module.config.authors.as_ref(),
         }
     }
 
@@ -270,6 +404,7 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.config.pub_year,
             Module::Commentary(commentary_module) => commentary_module.config.pub_year,
             Module::Notebook(notebook_module) => notebook_module.config.pub_year,
+            Module::Readings(readings_module) => readings_module.config.pub_year,
         }
     }
 
@@ -284,6 +419,84 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => &strongs_links_module.config.external,
             Module::Commentary(commentary_module) => &commentary_module.config.external,
             Module::Notebook(notebook_module) => &notebook_module.config.external,
+            Module::Readings(readings_module) => &readings_module.config.external,
+        }
+    }
+
+    pub fn data_source(&self) -> Option<&str>
+    {
+        match self 
+        {
+            Module::Bible(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::Dictionary(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::XRef(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::StrongsDefs(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::StrongsLinks(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::Commentary(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::Notebook(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+            Module::Readings(m) => m.config.data_source.as_ref().map(|s| s.as_str()),
+        }
+    }
+
+    pub fn license(&self) -> Option<&str>
+    {
+        match self 
+        {
+            Module::Bible(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::Dictionary(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::XRef(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::StrongsDefs(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::StrongsLinks(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::Commentary(m) => m.config.license.as_ref().map(|s| s.as_str()),
+            Module::Notebook(_) => None,
+            Module::Readings(m) => m.config.license.as_ref().map(|s| s.as_str()),
+        }
+    }
+
+    pub fn get_type(&self) -> ModuleType
+    {
+        match self 
+        {
+            Module::Bible(_) => ModuleType::Bible,
+            Module::Dictionary(_) => ModuleType::Dictionary,
+            Module::XRef(_) => ModuleType::CrossRefs,
+            Module::StrongsDefs(_) => ModuleType::StrongsDefs,
+            Module::StrongsLinks(_) => ModuleType::StrongsLinks,
+            Module::Commentary(_) => ModuleType::Commentary,
+            Module::Notebook(_) => ModuleType::Notebook,
+            Module::Readings(_) => ModuleType::Readings,
+        }
+    }
+
+    pub fn get_info(&self) -> ModuleInfo
+    {
+        ModuleInfo { 
+            module_type: self.get_type(),
+            name: self.name().to_string(), 
+            id: self.id().clone(), 
+            short_name: self.short_name().map(|s| s.to_string()), 
+            description: self.description().cloned(), 
+            authors: self.authors().cloned(), 
+            language: self.language(), 
+            data_source: self.data_source().map(|s| s.to_string()), 
+            pub_year: self.pub_year(), 
+            license: self.license().map(|s| s.to_string()),
+            external: self.external().clone(),
+        }
+    }
+
+    pub fn entries(&'_ self) ->  Box<dyn Iterator<Item = ModuleEntry<'_>> + '_>
+    {
+        match self 
+        {
+            Module::Bible(m) => Box::new(m.source.verses.values().map(|v| ModuleEntry::Verse(v))),
+            Module::Dictionary(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::Dictionary(e))),
+            Module::XRef(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::XRef(e))),
+            Module::StrongsDefs(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::StrongsDef(e))),
+            Module::StrongsLinks(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::StrongsLink(e))),
+            Module::Commentary(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::Commentary(e))),
+            Module::Notebook(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::Notebook(e))),
+            Module::Readings(m) => Box::new(m.entries.iter().map(|e| ModuleEntry::Readings(e))),
         }
     }
 
@@ -298,7 +511,35 @@ impl Module
             Module::StrongsLinks(links) => links.validate(builder),
             Module::Commentary(commentary) => commentary.validate(builder),
             Module::Notebook(notebook_module) => notebook_module.validate(builder),
+            Module::Readings(readings_module) => readings_module.validate(builder),
+        }?;
+
+        if !self.id().get().chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_')
+        {
+            return Err(vec![ModuleValidationError::InvalidModuleId { 
+                id: self.id().clone(), 
+                name: self.name().to_owned()
+            }])
         }
+
+        let errors = self.external().aliases.iter().filter_map(|(_, id)|{
+            if !builder.all_modules.contains_key(id)
+            {
+                Some(ModuleValidationError::ModuleIdDoesNotExist { id: id.clone() })
+            }
+            else 
+            {
+                None
+            }
+        })
+        .collect_vec();
+
+        if errors.len() > 0
+        {
+            return Err(errors)
+        }
+
+        Ok(())
     }
 
     pub fn has_entry(&self, entry: EntryId) -> bool
@@ -312,10 +553,11 @@ impl Module
             Module::StrongsLinks(strongs_links_module) => strongs_links_module.entries.iter().find(|e| e.id == entry).is_some(),
             Module::Commentary(commentary_module) => commentary_module.entries.iter().find(|e| e.id == entry).is_some(),
             Module::Notebook(notebook_module) => notebook_module.entries.iter().find(|e| e.id() == entry).is_some(),
+            Module::Readings(readings_module) => readings_module.entries.iter().find(|e| e.id == entry).is_some()
         }
     }
 
-    pub fn get_entry(&self, entry_id: EntryId) -> Option<ModuleEntry>
+    pub fn get_entry(&'_ self, entry_id: EntryId) -> Option<ModuleEntry<'_>>
     {
         let entry = match self 
         {
@@ -326,6 +568,7 @@ impl Module
             Module::StrongsLinks(strongs_links) => ModuleEntry::StrongsLink(strongs_links.entries.iter().find(|e| e.id == entry_id)?),
             Module::Commentary(commentary) => ModuleEntry::Commentary(commentary.entries.iter().find(|e| e.id == entry_id)?),
             Module::Notebook(notebook) => ModuleEntry::Notebook(notebook.entries.iter().find(|e| e.id() == entry_id)?),
+            Module::Readings(readings_module) => ModuleEntry::Readings(readings_module.entries.iter().find(|e| e.id == entry_id)?),
         };
 
         Some(entry)
@@ -344,6 +587,7 @@ pub enum ModuleEntry<'a>
     Commentary(&'a CommentaryEntry),
     Verse(&'a Verse),
     Notebook(&'a NotebookEntry),
+    Readings(&'a ReadingsEntry),
 }
 
 impl<'a> ModuleEntry<'a>
@@ -445,11 +689,40 @@ impl<'a> ModuleEntry<'a>
             _ => None,
         }
     }
+
+    pub fn is_readings(&self) -> bool
+    {
+        matches!(self, ModuleEntry::Readings(_))
+    }
+
+    pub fn as_readings(&self) -> Option<&'a ReadingsEntry>
+    {
+        match self 
+        {
+            ModuleEntry::Readings(e) => Some(e),
+            _ => None,
+        }
+    }
+
+    pub fn id(&self) -> EntryId
+    {
+        match self 
+        {
+            ModuleEntry::Dictionary(e) => e.id,
+            ModuleEntry::StrongsDef(e) => e.id,
+            ModuleEntry::StrongsLink(e) => e.id,
+            ModuleEntry::XRef(e) => e.id(),
+            ModuleEntry::Commentary(e) => e.id,
+            ModuleEntry::Verse(e) => e.id,
+            ModuleEntry::Notebook(e) => e.id(),
+            ModuleEntry::Readings(e) => e.id,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ModuleEntryRef
 {
-    pub module: String,
+    pub module: ModuleId,
     pub entry_id: EntryId,
 }

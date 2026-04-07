@@ -4,11 +4,10 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::core::OsisBook;
-use std::collections::HashSet;
 
 lazy_static::lazy_static!
 {
-    static ref VERSE_ID_REGEX: Regex = Regex::new("^(?P<book>[\\d*a-zA-Z]+).(?P<chapter>[1-9]\\d*)$").unwrap();
+    static ref VERSE_ID_REGEX: Regex = Regex::new("^(?P<book>[\\d*a-zA-Z]+)\\.(?P<chapter>[1-9]\\d*)$").unwrap();
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -74,6 +73,8 @@ impl<'de> Deserialize<'de> for ChapterId
 #[cfg(test)]
 mod tests 
 {
+    use std::collections::HashSet;
+
     use super::*;
 
     #[test]

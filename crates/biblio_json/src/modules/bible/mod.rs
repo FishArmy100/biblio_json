@@ -6,7 +6,7 @@ use std::{collections::{HashMap, HashSet}, num::NonZeroU32};
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{Atom, OsisBook, RefId, RefIdInner, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, bible::{abbrev_config::AbbrevConfig, alias_config::AliasConfig}}, utils, validation::ValidationContextBuilder};
+use crate::{core::{Atom, OsisBook, RefId, RefIdInner, VerseId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleId, ModuleValidationError, bible::{abbrev_config::AbbrevConfig, alias_config::AliasConfig}}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -14,6 +14,8 @@ use crate::{core::{Atom, OsisBook, RefId, RefIdInner, VerseId, lang::Language}, 
 pub struct BibleConfig
 {
     pub name: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
     pub authors: Option<Vec<String>>,
     pub language: Option<Language>,
     pub description: Option<HtmlText>,
@@ -81,7 +83,7 @@ impl BibleModule
 
     pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
-        let context = builder.build(Some(&self.config.name), &self.config.external);
+        let context = builder.build(Some(&self.config.id), &self.config.external);
         
         let errors = self.config.description.as_ref().iter()
             .flat_map(|d| d.validate(&context).err())
@@ -112,7 +114,11 @@ impl BibleSource
 {
     pub fn from_file(path: &str, books: &HashMap<OsisBook, String>, config: &BibleConfig) -> Result<BibleSource, String>
     {
-        let verses: Vec<(Verse, usize)> = utils::load_json_lines(path)?;
+        let verses: Vec<(Verse, usize)> = utils::load_json_lines(path)
+            .stringify_error()?
+            .into_iter()
+            .map(|l| (l.value, l.line))
+            .collect();
 
         let mut visited_books = HashSet::<OsisBook>::new();
         let mut current_book: Option<&OsisBook> = None;

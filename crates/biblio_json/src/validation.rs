@@ -1,6 +1,6 @@
 use std::{collections::HashMap, sync::Arc};
 
-use crate::{core::{RefId, RefIdInner}, modules::{ExternalModuleData, Module, bible::BibleModule}};
+use crate::{core::{RefId, RefIdInner}, modules::{ExternalModuleData, Module, ModuleId, bible::BibleModule}};
 
 #[derive(Debug, Clone)]
 pub enum RefIdValidationError
@@ -23,13 +23,13 @@ impl std::fmt::Display for RefIdValidationError
 
 pub struct ValidationContextBuilder<'a>
 {
-    pub bibles: &'a HashMap<String, Arc<BibleModule>>,
-    pub all_modules: &'a HashMap<String, Module>,
+    pub bibles: &'a HashMap<ModuleId, Arc<BibleModule>>,
+    pub all_modules: &'a HashMap<ModuleId, Module>,
 }
 
 impl<'a> ValidationContextBuilder<'a>
 {
-    pub fn build(&'a self, default_bible: Option<&'a str>, external: &'a ExternalModuleData) -> ValidationContext<'a>
+    pub fn build(&'a self, default_bible: Option<&'a ModuleId>, external: &'a ExternalModuleData) -> ValidationContext<'a>
     {
         ValidationContext
         {
@@ -44,9 +44,9 @@ impl<'a> ValidationContextBuilder<'a>
 #[derive(Debug, Clone)]
 pub struct ValidationContext<'a>
 {
-    pub bibles: &'a HashMap<String, Arc<BibleModule>>,
-    pub all_modules: &'a HashMap<String, Module>,
-    pub default_bible: Option<&'a str>,
+    pub bibles: &'a HashMap<ModuleId, Arc<BibleModule>>,
+    pub all_modules: &'a HashMap<ModuleId, Module>,
+    pub default_bible: Option<&'a ModuleId>,
     pub external: &'a ExternalModuleData,
 }
 

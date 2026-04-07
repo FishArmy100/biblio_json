@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{lang::Language, strongs_number::StrongsNumber}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError}, utils, validation::ValidationContextBuilder};
+use crate::{core::{lang::Language, strongs_number::StrongsNumber}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleId, ModuleValidationError}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(deny_unknown_fields)]
@@ -11,8 +11,7 @@ pub struct StrongsDefEntry
 {
     pub strongs_ref: StrongsNumber,
     pub word: String,
-    pub definitions: Vec<HtmlText>,
-    pub derivation: Option<HtmlText>,
+    pub definition: HtmlText,
     pub id: EntryId,
 }
 
@@ -21,6 +20,8 @@ pub struct StrongsDefEntry
 pub struct StrongsDefsConfig
 {
     pub name: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
     pub authors: Option<Vec<String>>,
     pub language: Option<Language>,
     pub description: Option<HtmlText>,
@@ -84,16 +85,7 @@ impl StrongsDefsModule
             .collect_vec();
 
         let entry_errors = self.entries.iter().map(|e| {
-            let mut errors = e.definitions.iter().filter_map(|d| d.validate(&context).err()).flatten().collect_vec();
-            if let Some(derivation) = &e.derivation
-            {
-                if let Some(e) = derivation.validate(&context).err()
-                {
-                    errors.extend(e);
-                }
-            }
-            
-            errors
+            e.definition.validate(&context).err().unwrap_or_default()
         })
         .flatten()
         .map(|e| ModuleValidationError::HtmlError { error: e })
@@ -119,9 +111,9 @@ impl StrongsDefEntry
 {
     pub fn from_file(path: &str) -> Result<Vec<Self>, String>
     {
-        let ret = utils::load_json_lines(path)?
+        let ret = utils::load_json_lines(path).stringify_error()?
             .into_iter()
-            .map(|(l, _)| l)
+            .map(|l| l.value)
             .collect();
 
         Ok(ret)

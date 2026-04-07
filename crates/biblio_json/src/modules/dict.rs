@@ -1,13 +1,15 @@
 use itertools::{EitherOrBoth, Itertools};
 use serde::{Deserialize, Serialize};
 
-use crate::{core::lang::Language, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError}, utils, validation::ValidationContextBuilder};
+use crate::{core::lang::Language, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleId, ModuleValidationError}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct DictConfig
 {
     pub name: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
     pub authors: Option<Vec<String>>,
     pub language: Option<Language>,
     pub description: Option<HtmlText>,
@@ -24,7 +26,7 @@ pub struct DictEntry
 {
     pub term: String,
     pub aliases: Option<Vec<String>>,
-    pub definitions: Vec<HtmlText>,
+    pub definition: HtmlText,
     pub id: EntryId,
 }
 
@@ -32,9 +34,9 @@ impl DictEntry
 {
     pub fn from_file(path: &str) -> Result<Vec<Self>, String>
     {
-        let ret = utils::load_json_lines(path)?
+        let ret = utils::load_json_lines(path).stringify_error()?
             .into_iter()
-            .map(|(l, _)| l)
+            .map(|l| l.value)
             .collect();
 
         Ok(ret)
@@ -74,7 +76,7 @@ impl DictModule
 
     pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
-        let context = builder.build(Some(&self.config.name), &self.config.external);
+        let context = builder.build(Some(&self.config.id), &self.config.external);
         
         let mut errors = self.config.description.as_ref()
             .map(|d| d.validate(&context).err())
@@ -90,8 +92,9 @@ impl DictModule
 
         for entry in &self.entries
         {
-            let entry_errors = entry.definitions.iter()
-                .filter_map(|d| d.validate(&context).err()).flatten()
+            let entry_errors = entry.definition.validate(&context).err()
+                .unwrap_or_default()
+                .into_iter()
                 .map(|error| ModuleValidationError::HtmlError { error })
                 .collect_vec();
 

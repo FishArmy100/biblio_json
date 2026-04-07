@@ -4,10 +4,9 @@ use itertools::Itertools;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use serde::de::Error;
 
-use crate::ValidationContext;
 use crate::core::VerseId;
-use crate::modules::EntryId;
-use crate::validation::{RefIdValidationError, ValidationContextBuilder};
+use crate::modules::{EntryId, ModuleId};
+use crate::validation::ValidationContextBuilder;
 use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{ExternalModuleData, ModuleValidationError}, utils};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,13 +15,15 @@ use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{Extern
 pub struct XRefsConfig
 {
     pub name: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
     pub authors: Option<Vec<String>>,
     pub language: Option<Language>,
     pub description: Option<HtmlText>,
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
     pub license: Option<String>,
-    pub bible: Option<String>,
+    pub bible: Option<ModuleId>,
     #[serde(default)]
     pub external: ExternalModuleData,
 }
@@ -49,15 +50,15 @@ impl XRefEntry
 {
     pub fn from_file(path: &str) -> Result<Vec<Self>, String>
     {
-        let ret = utils::load_json_lines(path)?
+        let ret = utils::load_json_lines(path).stringify_error()?
             .into_iter()
-            .map(|(l, _)| l)
+            .map(|l| l.value)
             .collect();
 
         Ok(ret)
     }
 
-    pub fn has_verse(&self, verse: &VerseId) -> bool
+    pub fn has_verse(&self, verse: VerseId) -> bool
     {
         match self 
         {
@@ -66,7 +67,7 @@ impl XRefEntry
         }
     }
 
-    pub fn has_verse_word(&self, verse: &VerseId, word: NonZeroU32) -> bool
+    pub fn has_verse_word(&self, verse: VerseId, word: NonZeroU32) -> bool
     {
         match self 
         {
@@ -266,7 +267,7 @@ impl XRefModule
 
     pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
-        let context = builder.build(self.config.bible.as_ref().map(|b| b.as_str()), &self.config.external);
+        let context = builder.build(self.config.bible.as_ref(), &self.config.external);
 
         if let Some(bible) = self.config.bible.as_ref()
         {

@@ -1,17 +1,18 @@
-use std::{collections::HashMap, fmt::Display, num::NonZeroU32, str::FromStr};
+use std::{collections::HashMap};
 
 use itertools::Itertools;
-use regex::Regex;
-use serde::{Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, StrongsNumber, VerseId, WordRange, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, ValidationContext}, utils, validation::ValidationContextBuilder};
+use crate::{core::{RefId, StrongsNumber, VerseId, WordRange, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleId, ModuleValidationError}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct StrongsLinkConfig
 {
     pub name: String,
-    pub bible: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
+    pub bible: ModuleId,
     pub authors: Option<Vec<String>>,
     pub language: Option<Language>,
     pub description: Option<HtmlText>,
@@ -138,9 +139,9 @@ impl StrongsLinkEntry
 {
     pub fn from_file(path: &str) -> Result<Vec<Self>, String>
     {
-        let ret = utils::load_json_lines(path)?
+        let ret = utils::load_json_lines(path).stringify_error()?
             .into_iter()
-            .map(|(l, _)| l)
+            .map(|l| l.value)
             .collect();
 
         Ok(ret)

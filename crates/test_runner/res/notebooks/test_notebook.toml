@@ -1,4 +1,5 @@
 name = "Test Notebook"
+id = "test_notebook"
 authors = [ "Nate Craver" ]
 language = "en"
 description = """

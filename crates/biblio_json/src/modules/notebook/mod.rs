@@ -3,7 +3,7 @@ pub mod highlight_color;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleValidationError, notebook::highlight_color::HighlightColor}, utils, validation::ValidationContextBuilder};
+use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{EntryId, ExternalModuleData, ModuleId, ModuleValidationError, notebook::highlight_color::HighlightColor}, utils, validation::ValidationContextBuilder};
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -11,12 +11,14 @@ use crate::{core::{RefId, lang::Language}, html_text::HtmlText, modules::{EntryI
 pub struct NotebookConfig
 {
     pub name: String,
+    pub id: ModuleId,
+    pub short_name: Option<String>,
     pub authors: Option<Vec<String>>,
     pub language: Option<Language>,
     pub description: Option<HtmlText>,
     pub data_source: Option<String>,
     pub pub_year: Option<u32>,
-    pub bible: Option<String>,
+    pub bible: Option<ModuleId>,
     
     #[serde(default)]
     pub external: ExternalModuleData,
@@ -61,9 +63,9 @@ impl NotebookEntry
 {
     pub fn from_file(path: &str) -> Result<Vec<Self>, String>
     {
-        let ret = utils::load_json_lines(path)?
+        let ret = utils::load_json_lines(path).stringify_error()?
             .into_iter()
-            .map(|(l, _)| l)
+            .map(|l| l.value)
             .collect();
 
         Ok(ret)
@@ -95,7 +97,7 @@ impl NotebookModule
 
     pub fn validate(&self, builder: &ValidationContextBuilder) -> Result<(), Vec<ModuleValidationError>>
     {
-        let context = builder.build(self.config.bible.as_ref().map(|e| e.as_str()), &self.config.external);
+        let context = builder.build(self.config.bible.as_ref(), &self.config.external);
 
         if let Some(bible) = self.config.bible.as_ref()
         {
