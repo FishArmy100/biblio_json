@@ -199,7 +199,7 @@ impl<'a> Iterator for VerseRangeIter<'a>
 
     fn next(&mut self) -> Option<Self::Item> 
     {
-        if self.current >= self.end 
+        if self.current > self.end 
         {
             return None;
         }
