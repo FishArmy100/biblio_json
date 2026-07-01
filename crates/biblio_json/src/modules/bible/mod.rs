@@ -261,6 +261,8 @@ pub struct Word
 {
     pub red: Option<bool>,
     pub italics: Option<bool>,
+    pub heb_sub: Option<bool>,
+    pub poem: Option<bool>,
     pub begin_punc: Option<String>,
     pub end_punc: Option<String>,
     pub text: String, 
